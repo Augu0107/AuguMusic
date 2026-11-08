@@ -146,6 +146,8 @@ final class AppSettings: ObservableObject {
     @Published var artistExceptions: [String] { didSet { defaults.set(artistExceptions, forKey: "artistExceptions") } }
     @Published var hiddenTabs: [String] { didSet { defaults.set(hiddenTabs, forKey: "hiddenTabs") } }
     @Published var widgetStyle: WidgetStyle { didSet { defaults.set(widgetStyle.rawValue, forKey: "widgetStyle") } }
+    /// Scheda aperta all'avvio (rawValue di MainTab).
+    @Published var startTab: String { didSet { defaults.set(startTab, forKey: "startTab") } }
 
     init() {
         let d = UserDefaults.standard
@@ -192,6 +194,7 @@ final class AppSettings: ObservableObject {
         }
         hiddenTabs = d.stringArray(forKey: "hiddenTabs") ?? []
         widgetStyle = WidgetStyle(rawValue: d.string(forKey: "widgetStyle") ?? "") ?? .artwork
+        startTab = d.string(forKey: "startTab") ?? "albums"
     }
 
     func isTabHidden(_ raw: String) -> Bool { hiddenTabs.contains(raw) }

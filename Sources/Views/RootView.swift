@@ -64,14 +64,14 @@ struct RootView: View {
     @EnvironmentObject private var ui: UIState
     @Environment(\.scenePhase) private var scenePhase
 
-    @SceneStorage("mainTab") private var tabRaw = MainTab.folders.rawValue
+    @State private var tabRaw = ""
     @State private var paths: [MainTab: NavigationPath] = [:]
     @State private var moreSheet: MoreSheet?
     @State private var confirmQuit = false
     @State private var tabChanges = 0
     @Namespace private var tabIndicator
 
-    private var tab: MainTab { MainTab(rawValue: tabRaw) ?? .folders }
+    private var tab: MainTab { MainTab(rawValue: tabRaw) ?? .nowPlaying }
 
     private var visibleTabs: [MainTab] {
         MainTab.allCases.filter { $0.isRequired || !settings.isTabHidden($0.rawValue) }
@@ -132,6 +132,16 @@ struct RootView: View {
             }
         } message: {
             Text("La musica si ferma e l'app si chiude.")
+        }
+        .onAppear {
+            // Scheda all'avvio scelta in Impostazioni; se è nascosta, la prima visibile.
+            guard tabRaw.isEmpty else { return }
+            if let start = MainTab(rawValue: settings.startTab), visibleTabs.contains(start) {
+                tabRaw = start.rawValue
+            } else {
+                tabRaw = visibleTabs.first { $0 != .queue && $0 != .nowPlaying && $0 != .search }?.rawValue
+                    ?? MainTab.nowPlaying.rawValue
+            }
         }
         .onChange(of: settings.hiddenTabs) { _, _ in
             if !visibleTabs.contains(tab) { select(.nowPlaying) }

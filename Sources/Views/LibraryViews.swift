@@ -124,7 +124,7 @@ struct ArtistsTabView: View {
         .overlay {
             if groups.isEmpty { LibraryEmptyView() }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .pinnedTop {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     ForEach(modes, id: \.self) { kind in
@@ -133,17 +133,18 @@ struct ArtistsTabView: View {
                         Button { modeRaw = kind.rawValue } label: {
                             Text(title)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(selected ? Color.white : Color.secondary)
+                                .foregroundStyle(selected ? Color.accentColor : Color.secondary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(selected ? Color.accentColor : Color(uiColor: .systemBackground),
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(selected ? Color.accentColor : Color(uiColor: .systemGray4), lineWidth: 1))
+                                .padding(.vertical, 9)
+                                .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(selected ? Color.accentColor : Color(uiColor: .systemGray4), lineWidth: selected ? 1.5 : 1))
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(Color(uiColor: .systemBackground))
@@ -155,16 +156,6 @@ struct ArtistsTabView: View {
         .sheet(isPresented: $showSearch) { GroupSearchSheet(kind: mode) }
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    player.shuffleAndPlay(groups.flatMap { library.tracks(for: $0.trackIDs) }, source: mode.title)
-                } label: {
-                    Label("Casuale", systemImage: "shuffle")
-                }
-                .disabled(groups.isEmpty)
-            }
-        }
     }
 }
 
@@ -199,7 +190,7 @@ struct AlbumGridView: View {
                     .padding(14)
                 }
                 .themedBackground()
-                .safeAreaInset(edge: .top, spacing: 0) {
+                .pinnedTop {
                     SearchFieldButton(prompt: "Cerca album") { showSearch = true }
                 }
             }
@@ -287,7 +278,7 @@ struct GroupSearchSheet: View {
             .buttonStyle(.plain)
         }
         .listStyle(.plain)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .pinnedTop {
             WideSearchField(text: $query, prompt: kind == .album ? "Cerca album" : "Cerca \(kind.title.lowercased())",
                             autoFocus: true)
         }
@@ -326,7 +317,7 @@ struct SongSearchSheet: View {
             .buttonStyle(.plain)
         }
         .listStyle(.plain)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .pinnedTop {
             WideSearchField(text: $query, prompt: "Cerca brani", autoFocus: true)
         }
     }
@@ -551,11 +542,6 @@ struct SearchView: View {
         .listStyle(.plain)
         .themedBackground()
         .selectionScope(songs)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            WideSearchField(text: $query, prompt: "Cerca tra tutti i brani", autoFocus: true)
-        }
-        .navigationTitle(q.isEmpty ? "Cerca brani" : "\(songs.count) brani")
-        .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if q.isEmpty {
                 ContentUnavailableView("Cerca brani", systemImage: "magnifyingglass",
@@ -563,6 +549,29 @@ struct SearchView: View {
             } else if songs.isEmpty {
                 ContentUnavailableView.search(text: q)
             }
+        }
+        .pinnedTop {
+            WideSearchField(text: $query, prompt: "Cerca tra tutti i brani", autoFocus: true)
+        }
+        .navigationTitle(q.isEmpty ? "Cerca brani" : "\(songs.count) brani")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+extension View {
+    /// Barra fissa sopra il contenuto, sempre larga quanto lo schermo.
+    func pinnedTop<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        VStack(spacing: 0) {
+            bar().frame(maxWidth: .infinity)
+            self.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Barra fissa sotto il contenuto, sempre larga quanto lo schermo.
+    func pinnedBottom<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        VStack(spacing: 0) {
+            self.frame(maxWidth: .infinity, maxHeight: .infinity)
+            bar().frame(maxWidth: .infinity)
         }
     }
 }

@@ -60,17 +60,49 @@ struct ArtworkView: View {
     }
 
     private var placeholder: some View {
-        let seed = (track?.album ?? "").unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0xFFFFFF }
-        let hue = Double(seed % 360) / 360
-        return ZStack {
-            LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.55),
-                                    Color(hue: hue, saturation: 0.6, brightness: 0.3)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            Image(systemName: "music.note")
-                .resizable()
-                .scaledToFit()
-                .padding(maxPixel > 300 ? 60 : 12)
-                .foregroundStyle(.white.opacity(0.75))
+        DefaultArtwork(showName: maxPixel > 300)
+    }
+}
+
+/// Copertina per i brani senza copertina (come Musicolet): sfondo grigio chiaro, tre dischi
+/// sempre più scuri, play bianco arrotondato con la nota e, sotto, il nome dell'app.
+struct DefaultArtwork: View {
+    var showName = true
+
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height)
+            let disc = s * (showName ? 0.46 : 0.62)
+            ZStack {
+                Color(white: 0.9)
+                VStack(spacing: s * 0.04) {
+                    ZStack {
+                        Circle().fill(Color(white: 0.78)).frame(width: disc, height: disc)
+                        Circle().fill(Color(white: 0.7)).frame(width: disc * 0.78, height: disc * 0.78)
+                        Circle().fill(Color(white: 0.62)).frame(width: disc * 0.56, height: disc * 0.56)
+                        ZStack {
+                            Image(systemName: "play.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .foregroundStyle(Color.white)
+                                .frame(width: disc * 0.3, height: disc * 0.3)
+                            Image(systemName: "music.note")
+                                .resizable()
+                                .scaledToFit()
+                                .foregroundStyle(Color(white: 0.62))
+                                .frame(width: disc * 0.1, height: disc * 0.12)
+                                .offset(x: -disc * 0.025)
+                        }
+                        .offset(x: disc * 0.025)
+                    }
+                    if showName {
+                        Text("AuguMusic")
+                            .font(.system(size: max(9, s * 0.065), weight: .semibold))
+                            .foregroundStyle(Color(white: 0.55))
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 }

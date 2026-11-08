@@ -114,7 +114,7 @@ struct AlbumDetailView: View {
         .selectionScope(shown)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .pinnedBottom {
             SearchFieldButton(prompt: "Cerca nell'album") { showSearch = true }
         }
         .sheet(isPresented: $showSearch) {

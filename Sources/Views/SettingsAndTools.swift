@@ -397,6 +397,11 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Picker("Scheda all'avvio", selection: $settings.startTab) {
+                    ForEach(MainTab.allCases) { item in
+                        Text(item.title).tag(item.rawValue)
+                    }
+                }
             } header: {
                 Text("Schede visibili")
             } footer: {
