@@ -440,7 +440,7 @@ struct TrackListScreen: View {
         List {
             if let headerTrackID, query.isEmpty {
                 HStack(alignment: .bottom, spacing: 18) {
-                    ArtworkView(track: library.byID[headerTrackID], maxPixel: 500, cornerRadius: 12, mode: .natural)
+                    ArtworkView(track: library.byID[headerTrackID], maxPixel: 500, cornerRadius: 0, mode: .fill)
                         .frame(maxWidth: 190, maxHeight: 240, alignment: .bottomLeading)
                         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
                     VStack(alignment: .leading, spacing: 4) {

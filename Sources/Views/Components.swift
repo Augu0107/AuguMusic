@@ -16,7 +16,7 @@ struct ArtworkView: View {
     let track: Track?
     var maxPixel: CGFloat = 150
     var cornerRadius: CGFloat = 6
-    var mode: ArtworkMode = .fitInSquare
+    var mode: ArtworkMode = .fill
 
     @State private var image: UIImage?
 

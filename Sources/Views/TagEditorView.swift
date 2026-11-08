@@ -134,19 +134,21 @@ struct TagEditorView: View {
                 Group {
                     switch artwork {
                     case .keep:
-                        ArtworkView(track: tracks.first, maxPixel: 400, cornerRadius: 10, mode: .natural)
+                        ArtworkView(track: tracks.first, maxPixel: 400, cornerRadius: 0, mode: .fill)
                     case .remove:
                         RoundedRectangle(cornerRadius: 10)
                             .fill(Color.secondary.opacity(0.2))
                             .overlay { Image(systemName: "photo.badge.minus").font(.title).foregroundStyle(.secondary) }
                     case .replace:
                         if let image = newArtworkImage {
-                            Image(uiImage: image).resizable().scaledToFit()
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            Image(uiImage: image).resizable().scaledToFill()
+                                .frame(width: 110, height: 110)
+                                .clipped()
                         }
                     }
                 }
                 .frame(width: 110, height: 110)
+                .clipped()
 
                 VStack(alignment: .leading, spacing: 10) {
                     PhotosPicker(selection: $photoItem, matching: .images) {

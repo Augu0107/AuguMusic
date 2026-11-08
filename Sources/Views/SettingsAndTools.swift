@@ -269,7 +269,7 @@ struct TrackInfoView: View {
                 Section {
                     HStack {
                         Spacer()
-                        ArtworkView(track: track, maxPixel: 600, cornerRadius: 12, mode: .natural)
+                        ArtworkView(track: track, maxPixel: 600, cornerRadius: 0, mode: .fill)
                             .frame(maxWidth: 220, maxHeight: 260)
                         Spacer()
                     }
