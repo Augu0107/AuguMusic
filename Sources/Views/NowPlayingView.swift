@@ -501,10 +501,15 @@ struct NowPlayingBackdrop: View {
         ZStack {
             Color(uiColor: .systemBackground)
             if settings.theme == .black { Color.black }
-            ArtworkView(track: player.currentTrack, maxPixel: 300, cornerRadius: 0, mode: .fill)
-                .scaleEffect(1.6)
-                .blur(radius: 70)
-                .opacity(settings.theme == .black ? 0.25 : 0.45)
+            // Solo se il brano ha una copertina vera: altrimenti lo sfondo resta pieno (bianco).
+            if let image = player.nowPlayingImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .scaleEffect(1.6)
+                    .blur(radius: 70)
+                    .opacity(settings.theme == .black ? 0.25 : 0.45)
+            }
         }
         .clipped()
         .ignoresSafeArea()

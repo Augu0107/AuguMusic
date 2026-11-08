@@ -69,7 +69,7 @@ struct NowPlayingWidgetView: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(Rectangle())
     }
 
     private func titles(_ snap: WidgetSnapshot, big: Bool) -> some View {

@@ -94,11 +94,11 @@ struct RootView: View {
         .background {
             ZStack {
                 Color(uiColor: .systemBackground).ignoresSafeArea()
-                if tab == .nowPlaying {
+                if barIsTransparent {
                     NowPlayingBackdrop().transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: tab == .nowPlaying)
+            .animation(.easeInOut(duration: 0.15), value: barIsTransparent)
         }
         .overlay(alignment: .top) { scanBanner }
         .overlay { ToastOverlay() }
@@ -289,11 +289,14 @@ struct RootView: View {
         }
         .frame(height: 54)
         // In riproduzione la barra è trasparente (resta il colore della copertina) con un separatore sopra.
-        .background(tab == .nowPlaying ? Color.clear : Color(uiColor: .systemBackground))
+        // Grigio chiaro; trasparente solo in riproduzione con un brano che ha la copertina.
+        .background(barIsTransparent ? Color.clear : Color(uiColor: .systemGray6))
         .overlay(alignment: .top) {
-            if tab == .nowPlaying { Divider() }
+            if barIsTransparent { Divider() }
         }
     }
+
+    private var barIsTransparent: Bool { tab == .nowPlaying && player.nowPlayingImage != nil }
 
     private func tabCell(_ glyph: AppGlyph, selected: Bool) -> some View {
         VStack(spacing: 0) {

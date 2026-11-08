@@ -35,7 +35,7 @@ struct ArtworkView: View {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .clipShape(Rectangle())
         } else {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
@@ -49,13 +49,13 @@ struct ArtworkView: View {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFit()
-                                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                                .clipShape(Rectangle())
                         }
                     } else {
                         placeholder
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .clipShape(Rectangle())
         }
     }
 

@@ -34,7 +34,8 @@ final class PlayerController: ObservableObject {
     private var tickCount = 0
     private var fadeTask: Task<Void, Never>?
     private var consecutiveFailures = 0
-    private var nowPlayingImage: UIImage?
+    /// Copertina del brano attuale (nil se il brano non ne ha).
+    @Published private(set) var nowPlayingImage: UIImage?
     private var sessionConfigured = false
     private var resumeAfterInterruption = false
     private var listenedSeconds: Double = 0
@@ -733,7 +734,7 @@ final class PlayerController: ObservableObject {
     }
 
     private func loadNowPlayingArtwork(track: Track, url: URL) {
-        nowPlayingImage = nil
+        // Tengo la copertina precedente finché non arriva la nuova, così sfondo e barra non lampeggiano.
         let id = track.id
         Task { [weak self] in
             let image = await ArtworkLoader.shared.image(for: track, url: url, maxPixel: 600)
