@@ -6,11 +6,10 @@ enum NowPlayingSheet: String, Identifiable {
 }
 
 enum SidePanel: String, CaseIterable, Identifiable {
-    case queue, lyrics, bookmarks
+    case lyrics, bookmarks
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .queue: "Coda"
         case .lyrics: "Testo"
         case .bookmarks: "Segnalibri"
         }
@@ -25,7 +24,7 @@ struct NowPlayingView: View {
     @EnvironmentObject private var ui: UIState
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("nowPlayingSidePanel") private var sidePanel: SidePanel = .queue
+    @AppStorage("nowPlayingSidePanel") private var sidePanel: SidePanel = .lyrics
     @State private var showLyricsInline = false
     @State private var lyrics: Lyrics?
     @State private var sheet: NowPlayingSheet?
@@ -57,7 +56,6 @@ struct NowPlayingView: View {
                 }
             }
         }
-        .overlay { ToastOverlay() }
         .sheet(item: $sheet) { which in
             sheetContent(which)
         }
@@ -105,11 +103,7 @@ struct NowPlayingView: View {
 
     private var topBar: some View {
         HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.down")
-                    .font(.title3.weight(.semibold))
-                    .frame(width: 44, height: 44)
-            }
+            Color.clear.frame(width: 44, height: 44)
             Spacer()
             VStack(spacing: 2) {
                 Text(player.activeQueue?.name ?? "")
@@ -267,7 +261,6 @@ struct NowPlayingView: View {
     private func secondaryControls(wide: Bool) -> some View {
         HStack(spacing: 0) {
             if !wide {
-                controlButton(icon: "list.bullet", label: "Coda") { sheet = .queue }
                 controlButton(icon: showLyricsInline ? "quote.bubble.fill" : "quote.bubble", label: "Testo",
                               active: showLyricsInline) {
                     withAnimation { showLyricsInline.toggle() }
@@ -315,13 +308,6 @@ struct NowPlayingView: View {
             .pickerStyle(.segmented)
             .padding(12)
             switch sidePanel {
-            case .queue:
-                if let id = player.activeQueueID {
-                    QueueDetailView(queueID: id, embedded: true)
-                        .scrollContentBackground(.hidden)
-                } else {
-                    ContentUnavailableView("Nessuna coda", systemImage: "list.number")
-                }
             case .lyrics:
                 LyricsView(lyrics: lyrics)
             case .bookmarks:

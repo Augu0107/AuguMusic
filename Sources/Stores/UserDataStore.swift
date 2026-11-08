@@ -4,6 +4,7 @@ private struct UserDataSnapshot: Codable {
     var playlists: [Playlist]
     var favorites: [String]
     var bookmarks: [Bookmark]
+    var stats: [String: PlayStat]?
 }
 
 @MainActor
@@ -19,6 +20,7 @@ final class UserDataStore: ObservableObject {
         }
     }
     @Published var bookmarks: [Bookmark] = [] { didSet { save() } }
+    @Published private(set) var stats: [String: PlayStat] = [:] { didSet { save() } }
 
     private var favoriteSet: Set<String> = []
     private var isLoading = false
@@ -30,12 +32,24 @@ final class UserDataStore: ObservableObject {
         playlists = snap.playlists
         favorites = snap.favorites
         bookmarks = snap.bookmarks
+        stats = snap.stats ?? [:]
     }
 
     private func save() {
         guard !isLoading else { return }
-        Storage.save(UserDataSnapshot(playlists: playlists, favorites: favorites, bookmarks: bookmarks), to: "userdata.json")
+        Storage.save(UserDataSnapshot(playlists: playlists, favorites: favorites, bookmarks: bookmarks, stats: stats), to: "userdata.json")
     }
+
+    // MARK: Statistiche di ascolto
+
+    func recordPlay(_ id: String) {
+        var stat = stats[id] ?? PlayStat(count: 0, lastPlayed: Date())
+        stat.count += 1
+        stat.lastPlayed = Date()
+        stats[id] = stat
+    }
+
+    func playCount(_ id: String) -> Int { stats[id]?.count ?? 0 }
 
     // MARK: Preferiti
 

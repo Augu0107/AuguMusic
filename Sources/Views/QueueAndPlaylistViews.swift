@@ -183,57 +183,159 @@ struct PlaylistsView: View {
 
     var body: some View {
         List {
-            NavigationLink(value: Route.favorites) {
-                Label {
-                    VStack(alignment: .leading) {
-                        Text("Preferiti")
-                        Text("\(userData.favorites.count) brani").font(.caption).foregroundStyle(.secondary)
+            row(.allSongs, "Tutti i brani", value: .smart(.allSongs))
+            row(.favorites, "Preferiti", value: .favorites)
+            row(.recentlyAdded, "Aggiunti di recente", value: .smart(.recentlyAdded))
+            row(.recentlyPlayed, "Riprodotti di recente", value: .smart(.recentlyPlayed))
+            row(.mostPlayed, "Più riprodotti", value: .smart(.mostPlayed))
+            row(.neverPlayed, "Mai riprodotti", value: .smart(.neverPlayed))
+
+            Text("Le tue playlist")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.top, 14)
+                .listRowSeparator(.hidden)
+
+            ForEach(userData.playlists) { p in
+                NavigationLink(value: Route.playlist(p.id)) {
+                    HStack(spacing: 14) {
+                        AppIconView(glyph: .playlist, size: 20)
+                            .foregroundStyle(.secondary)
+                        Text(p.name)
+                        Spacer()
+                        Text("\(p.items.count)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
-                } icon: {
-                    Image(systemName: "heart.fill").foregroundStyle(.pink)
+                }
+                .listRowSeparator(.hidden)
+                .contextMenu {
+                    TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false)
+                    Divider()
+                    Button(role: .destructive) { userData.deletePlaylist(p.id) } label: { Label("Elimina playlist", systemImage: "trash") }
                 }
             }
-            Section("Playlist") {
-                if userData.playlists.isEmpty {
-                    Text("Nessuna playlist. Creane una con +.").foregroundStyle(.secondary)
-                }
-                ForEach(userData.playlists) { p in
-                    NavigationLink(value: Route.playlist(p.id)) {
-                        Label {
-                            VStack(alignment: .leading) {
-                                Text(p.name)
-                                Text("\(p.items.count) brani").font(.caption).foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "music.note.list")
-                        }
-                    }
-                    .contextMenu {
-                        TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false)
-                        Divider()
-                        Button(role: .destructive) { userData.deletePlaylist(p.id) } label: { Label("Elimina playlist", systemImage: "trash") }
-                    }
-                }
-                .onDelete { offsets in
-                    let ids = offsets.map { userData.playlists[$0].id }
-                    for id in ids { userData.deletePlaylist(id) }
-                }
+            .onDelete { offsets in
+                let ids = offsets.map { userData.playlists[$0].id }
+                for id in ids { userData.deletePlaylist(id) }
             }
+
+            Button {
+                newName = ""
+                showNew = true
+            } label: {
+                Label("Nuova playlist", systemImage: "plus")
+            }
+            .listRowSeparator(.hidden)
         }
+        .listStyle(.plain)
         .themedBackground()
         .navigationTitle("Playlist")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    newName = ""
-                    showNew = true
-                } label: { Label("Nuova playlist", systemImage: "plus") }
-            }
-        }
         .alert("Nuova playlist", isPresented: $showNew) {
             TextField("Nome", text: $newName)
             Button("Crea") { userData.createPlaylist(name: newName) }
             Button("Annulla", role: .cancel) {}
+        }
+    }
+
+    private func row(_ glyph: AppGlyph, _ title: String, value: Route) -> some View {
+        NavigationLink(value: value) {
+            HStack(spacing: 14) {
+                AppIconView(glyph: glyph, size: 22)
+                    .foregroundStyle(.secondary)
+                Text(title)
+            }
+            .padding(.vertical, 2)
+        }
+        .listRowSeparator(.hidden)
+    }
+}
+
+/// Playlist automatiche: tutti i brani, aggiunti/riprodotti di recente, più e mai riprodotti.
+struct SmartListView: View {
+    let list: SmartList
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var userData: UserDataStore
+
+    var body: some View {
+        let stats = userData.stats
+        let tracks: [Track] = {
+            switch list {
+            case .allSongs:
+                return library.tracks
+            case .recentlyAdded:
+                return Array(library.tracks.sorted { $0.dateAdded > $1.dateAdded }.prefix(300))
+            case .recentlyPlayed:
+                return stats.filter { library.byID[$0.key] != nil }
+                    .sorted { $0.value.lastPlayed > $1.value.lastPlayed }
+                    .prefix(300)
+                    .compactMap { library.byID[$0.key] }
+            case .mostPlayed:
+                return stats.filter { $0.value.count > 0 && library.byID[$0.key] != nil }
+                    .sorted { $0.value.count > $1.value.count }
+                    .prefix(300)
+                    .compactMap { library.byID[$0.key] }
+            case .neverPlayed:
+                return library.tracks.filter { stats[$0.id] == nil }
+            }
+        }()
+        if tracks.isEmpty {
+            ContentUnavailableView(list.title, systemImage: "music.note",
+                                   description: Text(list == .recentlyPlayed || list == .mostPlayed
+                                                     ? "Gli ascolti si contano dopo metà brano (massimo 30 secondi)."
+                                                     : "Nessun brano."))
+                .navigationTitle(list.title)
+        } else {
+            TrackListScreen(title: list.title, subtitle: nil, tracks: tracks,
+                            initialSort: list == .allSongs ? .title : .original)
+        }
+    }
+}
+
+/// Scheda Coda: la coda attiva, con il selettore delle code in alto.
+struct QueueTabView: View {
+    @EnvironmentObject private var player: PlayerController
+    @State private var showAllQueues = false
+
+    var body: some View {
+        Group {
+            if let id = player.activeQueueID {
+                QueueDetailView(queueID: id)
+            } else {
+                ContentUnavailableView("Nessuna coda", systemImage: "music.note.list",
+                                       description: Text("Tocca un brano per creare la prima coda."))
+                    .navigationTitle("Coda")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    ForEach(player.queues) { q in
+                        Button {
+                            player.switchToQueue(q.id, autoplay: false)
+                        } label: {
+                            if q.id == player.activeQueueID {
+                                Label("\(q.name) (\(q.items.count))", systemImage: "checkmark")
+                            } else {
+                                Text("\(q.name) (\(q.items.count))")
+                            }
+                        }
+                    }
+                    Divider()
+                    Button { showAllQueues = true } label: { Label("Gestisci le code…", systemImage: "list.number") }
+                } label: {
+                    Label("Code (\(player.queues.count))", systemImage: "rectangle.stack")
+                }
+            }
+        }
+        .sheet(isPresented: $showAllQueues) {
+            NavigationStack {
+                QueuesView()
+                    .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Fine") { showAllQueues = false } }
+                    }
+            }
         }
     }
 }

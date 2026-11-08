@@ -37,6 +37,8 @@ final class PlayerController: ObservableObject {
     private var nowPlayingImage: UIImage?
     private var sessionConfigured = false
     private var resumeAfterInterruption = false
+    private var listenedSeconds: Double = 0
+    private var playCounted = false
 
     private static let queuesFile = "queues.json"
 
@@ -144,6 +146,8 @@ final class PlayerController: ObservableObject {
             return
         }
         abRepeat = ABRepeat()
+        listenedSeconds = 0
+        playCounted = false
         guard let track = library.byID[id], let url = library.url(for: track) else {
             handleLoadFailure(autoplay: autoplay, reason: "Brano non trovato, passo al successivo")
             return
@@ -294,6 +298,12 @@ final class PlayerController: ObservableObject {
         guard isPlaying else { return }
         let t = audio.currentTime
         clock.time = t
+        // Conta un ascolto dopo metà brano (al massimo 30 secondi), come le statistiche di Musicolet.
+        listenedSeconds += 0.25 * settings.speed
+        if !playCounted, let id = loadedTrackID, listenedSeconds >= min(30, max(5, duration * 0.5)) {
+            playCounted = true
+            UserDataStore.shared?.recordPlay(id)
+        }
         if let a = abRepeat.a, let b = abRepeat.b, b > a, t >= b {
             seek(to: a)
         }

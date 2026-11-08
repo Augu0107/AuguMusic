@@ -19,6 +19,7 @@ struct GroupListView: View {
                     NavigationLink(value: Route.group(kind, group.id)) {
                         GroupRow(group: group)
                     }
+                    .listRowSeparator(.hidden)
                     .contextMenu {
                         TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false)
                     }
@@ -103,7 +104,7 @@ struct AlbumGridView: View {
     @EnvironmentObject private var player: PlayerController
     @State private var query = ""
 
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 18)]
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
 
     var body: some View {
         let all = library.groups(of: .album)
@@ -113,16 +114,10 @@ struct AlbumGridView: View {
                 LibraryEmptyView()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 22) {
+                    LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(albums) { album in
                             NavigationLink(value: Route.group(.album, album.id)) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 10, mode: .fill)
-                                        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-                                    Text(album.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(2)
-                                }
+                                AlbumCard(album: album)
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
@@ -130,13 +125,62 @@ struct AlbumGridView: View {
                             }
                         }
                     }
-                    .padding()
+                    .padding(14)
                 }
                 .themedBackground()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    WideSearchField(text: $query, prompt: "Cerca album")
+                }
             }
         }
         .navigationTitle("Album")
-        .searchable(text: $query, prompt: "Cerca album")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Rettangolo verticale bianco con bordino grigio: copertina quadrata e sotto il titolo (come Musicolet).
+struct AlbumCard: View {
+    let album: TrackGroup
+    @EnvironmentObject private var library: LibraryStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 4, mode: .fill)
+            Text(album.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(8)
+        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
+    }
+}
+
+/// Barra di ricerca larga quanto tutto lo schermo.
+struct WideSearchField: View {
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField(prompt, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .overlay(alignment: .bottom) { Divider() }
     }
 }
 

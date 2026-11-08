@@ -155,18 +155,28 @@ struct AlbumDetailView: View {
         .background(.bar)
     }
 
+    /// Riquadro bianco con bordino grigio e, 2px sotto, una lineetta.
+    /// Con "Tutti…" scelto tutte le lineette sono del colore d'accento; scegliendo un nome,
+    /// gli altri diventano grigio chiaro (testo e lineetta).
     private func tile(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(name)
-                .font(.footnote.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .minimumScaleFactor(0.8)
-                .padding(8)
-                .frame(width: 96, height: 96)
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? Color.accentColor : Color.secondary.opacity(0.15),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        let dimmed = selectedName != nil && !selected
+        let lightGray = Color(uiColor: .systemGray3)
+        return Button(action: action) {
+            VStack(spacing: 2) {
+                Text(name)
+                    .font(.footnote.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.8)
+                    .padding(8)
+                    .frame(width: 96, height: 96)
+                    .foregroundStyle(dimmed ? lightGray : Color.primary)
+                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
+                Rectangle()
+                    .fill(dimmed ? lightGray : Color.accentColor)
+                    .frame(width: 96, height: 3)
+            }
         }
         .buttonStyle(.plain)
     }

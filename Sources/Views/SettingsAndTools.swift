@@ -387,16 +387,20 @@ struct SettingsView: View {
             }
 
             Section {
-                ForEach(SidebarItem.allCases.filter { $0 != .settings }) { item in
+                ForEach(MainTab.allCases.filter { !$0.isRequired }) { item in
                     Toggle(isOn: Binding(get: { !settings.isTabHidden(item.rawValue) },
                                          set: { settings.setTab(item.rawValue, hidden: !$0) })) {
-                        Label(item.title, systemImage: item.icon)
+                        Label {
+                            Text(item.title)
+                        } icon: {
+                            AppIconView(glyph: item.glyph, size: 20)
+                        }
                     }
                 }
             } header: {
                 Text("Schede visibili")
             } footer: {
-                Text("Puoi anche tenere premuta una scheda nella barra laterale e scegliere \"Nascondi\". Impostazioni resta sempre visibile.")
+                Text("Puoi anche tenere premuta una scheda nella barra in basso e scegliere \"Nascondi\". Coda e In riproduzione restano sempre visibili.")
             }
 
             Section("Aspetto") {

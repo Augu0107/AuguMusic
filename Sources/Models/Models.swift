@@ -144,6 +144,28 @@ enum Route: Hashable {
     case playlist(UUID)
     case favorites
     case queue(UUID)
+    case smart(SmartList)
+    case search
+}
+
+/// Playlist automatiche della scheda Playlist (come Musicolet).
+enum SmartList: String, Hashable, CaseIterable, Identifiable {
+    case allSongs, recentlyAdded, recentlyPlayed, mostPlayed, neverPlayed
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .allSongs: "Tutti i brani"
+        case .recentlyAdded: "Aggiunti di recente"
+        case .recentlyPlayed: "Riprodotti di recente"
+        case .mostPlayed: "Più riprodotti"
+        case .neverPlayed: "Mai riprodotti"
+        }
+    }
+}
+
+struct PlayStat: Codable, Equatable {
+    var count: Int
+    var lastPlayed: Date
 }
 
 // MARK: - Code

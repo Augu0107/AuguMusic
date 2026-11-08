@@ -177,6 +177,11 @@ final class AppSettings: ObservableObject {
 
         artistSeparators = d.stringArray(forKey: "artistSeparators") ?? [";", "&"]
         artistExceptions = d.stringArray(forKey: "artistExceptions") ?? []
+        // v0.4: schede in basso. Artisti album e Compositori partono nascoste, come in Musicolet.
+        if !d.bool(forKey: "bottomTabsV1") {
+            d.set(["albumArtists", "composers"], forKey: "hiddenTabs")
+            d.set(true, forKey: "bottomTabsV1")
+        }
         hiddenTabs = d.stringArray(forKey: "hiddenTabs") ?? []
         widgetStyle = WidgetStyle(rawValue: d.string(forKey: "widgetStyle") ?? "") ?? .artwork
     }

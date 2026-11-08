@@ -156,6 +156,7 @@ struct TrackListRow: View {
             TrackMenuButton(tracks: [track], sourceName: sourceName)
         }
         .listRowBackground(selected ? Color.accentColor.opacity(0.16) : nil)
+        .listRowSeparator(.hidden)
     }
 }
 
@@ -262,9 +263,9 @@ struct TrackMenuButton: View {
         Menu {
             TrackMenu(tracks: tracks, sourceName: sourceName, showNavigation: showNavigation)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.body.weight(.bold))
+            DotsGlyph()
                 .foregroundStyle(Color.white)
+                .frame(width: 22, height: 6)
                 .frame(width: 34, height: 34)
                 .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
