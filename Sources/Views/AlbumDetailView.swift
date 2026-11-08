@@ -96,8 +96,7 @@ struct AlbumDetailView: View {
             ForEach(Array(shown.enumerated()), id: \.offset) { index, track in
                 TrackListRow(track: track,
                              isCurrent: player.loadedTrackID == track.id,
-                             showArtwork: false,
-                             leadingNumber: track.trackNumber,
+                             showArtwork: true,
                              sourceName: album.name) {
                     player.play(shown, startAt: index, source: album.name)
                 }
@@ -116,7 +115,7 @@ struct AlbumDetailView: View {
         .selectionScope(shown)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca nell'album")
+        .safeAreaInset(edge: .bottom) { searchBar }
         .onChange(of: filterKind) { _, _ in selectedName = nil }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -131,6 +130,29 @@ struct AlbumDetailView: View {
                 }
             }
         }
+    }
+
+    /// Barra di ricerca ancorata in fondo, sotto la lista.
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Cerca nell'album", text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     private func tile(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {

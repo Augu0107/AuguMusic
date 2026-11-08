@@ -64,23 +64,32 @@ private struct SkipShape: Shape {
     }
 }
 
+/// Una sola forma che cambia disegno: così play ↔ pausa cambia di colpo, senza dissolvenza.
+private struct GlyphShape: Shape {
+    let glyph: TransportGlyph
+
+    func path(in rect: CGRect) -> Path {
+        switch glyph {
+        case .play: PlayShape().path(in: rect)
+        case .pause: PauseShape().path(in: rect)
+        case .next: SkipShape(forward: true).path(in: rect)
+        case .previous: SkipShape(forward: false).path(in: rect)
+        }
+    }
+}
+
 struct TransportIcon: View {
     let glyph: TransportGlyph
     var size: CGFloat = 24
 
     var body: some View {
-        shape
+        GlyphShape(glyph: glyph)
+            .fill(.foreground)
             .frame(width: size, height: size)
             .contentShape(Rectangle())
-    }
-
-    @ViewBuilder
-    private var shape: some View {
-        switch glyph {
-        case .play: PlayShape().fill(.foreground)
-        case .pause: PauseShape().fill(.foreground)
-        case .next: SkipShape(forward: true).fill(.foreground)
-        case .previous: SkipShape(forward: false).fill(.foreground)
-        }
+            .transaction { t in
+                t.animation = nil
+                t.disablesAnimations = true
+            }
     }
 }

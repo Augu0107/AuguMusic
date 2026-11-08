@@ -82,6 +82,7 @@ struct TrackRow: View {
     var isCurrent = false
     var showArtwork = true
     var leadingNumber: Int? = nil
+    var selected = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -94,6 +95,16 @@ struct TrackRow: View {
             if showArtwork {
                 ArtworkView(track: track, maxPixel: 132, cornerRadius: 5)
                     .frame(width: 44, height: 44)
+                    .overlay {
+                        if selected {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.black.opacity(0.55))
+                                Image(systemName: "checkmark")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                    }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.displayTitle)
@@ -128,12 +139,12 @@ struct TrackListRow: View {
     var body: some View {
         let selected = ui.isSelected(track.id)
         HStack(spacing: 8) {
-            if ui.isSelecting {
+            if ui.isSelecting && !showArtwork {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .foregroundStyle(selected ? Color.accentColor : Color.secondary)
             }
-            TrackRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: leadingNumber)
+            TrackRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: leadingNumber, selected: selected)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if ui.isSelecting { ui.toggleSelection(track.id) } else { onTap() }
@@ -252,10 +263,10 @@ struct TrackMenuButton: View {
             TrackMenu(tracks: tracks, sourceName: sourceName, showNavigation: showNavigation)
         } label: {
             Image(systemName: "ellipsis")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.body.weight(.bold))
+                .foregroundStyle(Color.white)
                 .frame(width: 34, height: 34)
-                .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
