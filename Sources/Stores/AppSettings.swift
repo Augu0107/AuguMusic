@@ -157,7 +157,12 @@ final class AppSettings: ObservableObject {
         confirmQueueRemoval = bool("confirmQueueRemoval", true)
         keepScreenOn = bool("keepScreenOn", false)
 
-        fadeEnabled = bool("fadeEnabled", true)
+        // La dissolvenza su play/pausa ora parte spenta (Musicolet non la fa). Spenta una volta anche per chi l'aveva.
+        if !d.bool(forKey: "fadeOffV1") {
+            d.set(false, forKey: "fadeEnabled")
+            d.set(true, forKey: "fadeOffV1")
+        }
+        fadeEnabled = bool("fadeEnabled", false)
         fadeDuration = double("fadeDuration", 0.4)
         replayGain = ReplayGainMode(rawValue: d.string(forKey: "replayGain") ?? "") ?? .off
         replayGainPreamp = double("replayGainPreamp", 0)

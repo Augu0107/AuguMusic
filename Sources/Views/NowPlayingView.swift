@@ -34,7 +34,6 @@ struct NowPlayingView: View {
         GeometryReader { geo in
             let wide = geo.size.width > geo.size.height && geo.size.width > 700
             ZStack {
-                background
                 VStack(spacing: 0) {
                     topBar
                     if wide {
@@ -63,6 +62,7 @@ struct NowPlayingView: View {
                 }
             }
         }
+        .background(NowPlayingBackdrop())
         .sheet(item: $sheet) { which in
             sheetContent(which)
         }
@@ -95,18 +95,6 @@ struct NowPlayingView: View {
     }
 
     // MARK: Parti
-
-    private var background: some View {
-        ZStack {
-            Color(uiColor: .systemBackground)
-            if settings.theme == .black { Color.black }
-            ArtworkView(track: player.currentTrack, maxPixel: 300, cornerRadius: 0, mode: .fill)
-                .scaleEffect(1.6)
-                .blur(radius: 70)
-                .opacity(settings.theme == .black ? 0.25 : 0.45)
-        }
-        .ignoresSafeArea()
-    }
 
     private var topBar: some View {
         HStack {
@@ -503,5 +491,24 @@ struct BookmarksPanel: View {
         } message: {
             Text("A \(formatTime(addingAt ?? 0))")
         }
+    }
+}
+
+/// Sfondo sfocato preso dalla copertina; lo disegna RootView dietro la scheda e la barra in basso.
+struct NowPlayingBackdrop: View {
+    @EnvironmentObject private var player: PlayerController
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+            if settings.theme == .black { Color.black }
+            ArtworkView(track: player.currentTrack, maxPixel: 300, cornerRadius: 0, mode: .fill)
+                .scaleEffect(1.6)
+                .blur(radius: 70)
+                .opacity(settings.theme == .black ? 0.25 : 0.45)
+        }
+        .clipped()
+        .ignoresSafeArea()
     }
 }

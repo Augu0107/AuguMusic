@@ -66,6 +66,8 @@ struct RootView: View {
     @State private var paths: [MainTab: NavigationPath] = [:]
     @State private var moreSheet: MoreSheet?
     @State private var confirmQuit = false
+    @State private var tabChanges = 0
+    @Namespace private var tabIndicator
 
     private var tab: MainTab { MainTab(rawValue: tabRaw) ?? .folders }
 
@@ -78,11 +80,23 @@ struct RootView: View {
             ZStack {
                 content
                     .id(tab)
-                    .transition(.opacity)
+                    .zIndex(Double(tabChanges))
+                    .transition(.asymmetric(insertion: .move(edge: .trailing),
+                                            removal: .modifier(active: SlideBehind(x: -60), identity: SlideBehind(x: 0))))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             SelectionBar()
             bottomBar
+        }
+        .background {
+            ZStack {
+                Color(uiColor: .systemBackground).ignoresSafeArea()
+                if tab == .nowPlaying {
+                    NowPlayingBackdrop().transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: tab == .nowPlaying)
         }
         .overlay(alignment: .top) { scanBanner }
         .overlay { ToastOverlay() }
@@ -118,14 +132,14 @@ struct RootView: View {
             Text("La musica si ferma e l'app si chiude.")
         }
         .onChange(of: settings.hiddenTabs) { _, _ in
-            if !visibleTabs.contains(tab) { tabRaw = MainTab.nowPlaying.rawValue }
+            if !visibleTabs.contains(tab) { select(.nowPlaying) }
         }
         .onOpenURL { url in
-            if url.host == "nowplaying" { tabRaw = MainTab.nowPlaying.rawValue }
+            if url.host == "nowplaying" { select(.nowPlaying) }
         }
         .onChange(of: ui.showNowPlaying) { _, show in
             guard show else { return }
-            tabRaw = MainTab.nowPlaying.rawValue
+            select(.nowPlaying)
             ui.showNowPlaying = false
         }
         .onChange(of: ui.pendingRoute) { _, route in
@@ -209,7 +223,14 @@ struct RootView: View {
         var p = NavigationPath()
         p.append(route)
         paths[target] = p
-        tabRaw = target.rawValue
+        select(target)
+    }
+
+    /// La nuova schermata entra da destra e copre la precedente (circa 0,2 s).
+    private func select(_ t: MainTab) {
+        guard t != tab else { return }
+        tabChanges += 1
+        withAnimation(.easeOut(duration: 0.2)) { tabRaw = t.rawValue }
     }
 
     // MARK: Barra in basso
@@ -221,8 +242,7 @@ struct RootView: View {
                     if t == tab {
                         paths[t] = NavigationPath() // secondo tocco: torna all'inizio della scheda
                     } else {
-                        // Dissolvenza tra le schede (il colore della riproduzione sfuma invece di sparire)
-                        withAnimation(.easeInOut(duration: 0.35)) { tabRaw = t.rawValue }
+                        select(t)
                     }
                 } label: {
                     tabCell(t.glyph, selected: t == tab)
@@ -256,15 +276,25 @@ struct RootView: View {
             .accessibilityLabel("Altro")
         }
         .frame(height: 54)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        // In riproduzione la barra è trasparente (resta il colore della copertina) con un separatore sopra.
+        .background(tab == .nowPlaying ? Color.clear : Color(uiColor: .systemBackground))
+        .overlay(alignment: .top) {
+            if tab == .nowPlaying { Divider() }
+        }
     }
 
     private func tabCell(_ glyph: AppGlyph, selected: Bool) -> some View {
         VStack(spacing: 0) {
-            Rectangle()
-                .fill(selected ? Color.accentColor : Color.clear)
-                .frame(height: 3)
+            ZStack {
+                Color.clear.frame(height: 3)
+                if selected {
+                    // La lineetta scivola sull'icona toccata; in riproduzione diventa nera.
+                    Rectangle()
+                        .fill(tab == .nowPlaying ? Color.primary : Color.accentColor)
+                        .frame(height: 3)
+                        .matchedGeometryEffect(id: "tabIndicator", in: tabIndicator)
+                }
+            }
             Spacer(minLength: 0)
             AppIconView(glyph: glyph, size: 22)
                 .foregroundStyle(selected ? Color.primary.opacity(0.75) : Color(uiColor: .systemGray3))
@@ -319,5 +349,13 @@ struct RouteDestination: View {
         case .search:
             SearchView()
         }
+    }
+}
+
+/// Usato quando si cambia scheda: la schermata vecchia arretra un po' mentre la nuova la copre.
+struct SlideBehind: ViewModifier {
+    let x: CGFloat
+    func body(content: Content) -> some View {
+        content.offset(x: x)
     }
 }
