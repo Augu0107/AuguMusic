@@ -28,9 +28,10 @@ enum MetadataReader {
                     }
                 }
             }
-            if t.duration > 0 { return t }
+            let tagsComplete = !t.title.isEmpty && !t.artist.isEmpty && !t.album.isEmpty
+            if t.duration > 0 && tagsComplete { return t }
         }
-        // iOS non lo apre (formato diverso dall'estensione, Ogg, Opus...): TagLib guarda il contenuto.
+        // iOS non lo apre o non trova tutti i tag (ID3 particolari, Ogg, Opus...): TagLib completa i campi mancanti.
         applyTagLib(url: entry.url, to: &t)
         return t
     }
@@ -50,7 +51,9 @@ enum MetadataReader {
     static func applyTagLib(url: URL, to t: inout Track) {
         guard let file = openTagLibFile(url) else { return }
         let m = file.metadata
+        // Riempie solo i campi vuoti: quello che iOS ha già letto resta com'è.
         func take(_ value: String?, _ field: inout String) {
+            guard field.isEmpty else { return }
             if let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty { field = v }
         }
         take(m.title, &t.title)
@@ -59,12 +62,12 @@ enum MetadataReader {
         take(m.albumArtist, &t.albumArtist)
         take(m.composer, &t.composer)
         take(m.genre, &t.genre)
-        if let y = parseYear(m.releaseDate) { t.year = y }
-        if let n = m.trackNumber, n > 0 { t.trackNumber = n }
-        if let n = m.discNumber, n > 0 { t.discNumber = n }
-        if let g = m.replayGainTrackGain { t.replayGainTrack = g }
-        if let g = m.replayGainAlbumGain { t.replayGainAlbum = g }
-        if let d = file.properties.duration, d > 0 { t.duration = d }
+        if t.year == nil, let y = parseYear(m.releaseDate) { t.year = y }
+        if t.trackNumber == nil, let n = m.trackNumber, n > 0 { t.trackNumber = n }
+        if t.discNumber == nil, let n = m.discNumber, n > 0 { t.discNumber = n }
+        if t.replayGainTrack == nil, let g = m.replayGainTrackGain { t.replayGainTrack = g }
+        if t.replayGainAlbum == nil, let g = m.replayGainAlbumGain { t.replayGainAlbum = g }
+        if t.duration <= 0, let d = file.properties.duration, d > 0 { t.duration = d }
         t.formatName = file.properties.formatName
     }
 

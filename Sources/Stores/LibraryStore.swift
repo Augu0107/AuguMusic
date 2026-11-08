@@ -164,10 +164,13 @@ final class LibraryStore: ObservableObject {
         }.value
 
         let old = byID
+        // Quando cambia il modo di leggere i tag, rileggo tutto una volta.
+        let currentReaderVersion = 2
+        let cacheValid = UserDefaults.standard.integer(forKey: "metadataReaderVersion") >= currentReaderVersion
         var result: [Track] = tracks.filter { unreachable.contains($0.folderID) }
         var pending: [FileEntry] = []
         for entry in entries {
-            if let t = old[entry.id], t.modified == entry.modified, t.fileSize == entry.size {
+            if cacheValid, let t = old[entry.id], t.modified == entry.modified, t.fileSize == entry.size {
                 result.append(t)
             } else {
                 pending.append(entry)
@@ -195,6 +198,7 @@ final class LibraryStore: ObservableObject {
 
         setTracks(result)
         saveTracks()
+        UserDefaults.standard.set(currentReaderVersion, forKey: "metadataReaderVersion")
         isScanning = false
     }
 
