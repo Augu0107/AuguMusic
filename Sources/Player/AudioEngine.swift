@@ -1,41 +1,87 @@
 import AVFoundation
 import SFBAudioEngine
 
-/// Motore audio: AVAudioPlayerNode -> TimePitch (velocità/tono) -> EQ (10 bande + bassi) -> mixer.
+/// Un "piatto" del motore: player + velocità/tono e il brano caricato.
+/// Ce ne sono due per poter fare il crossfade tra un brano e l'altro.
+private final class Deck {
+    let player = AVAudioPlayerNode()
+    let pitch = AVAudioUnitTimePitch()
+    var connectedFormat: AVAudioFormat?
+
+    var file: AVAudioFile?
+    var decoder: AudioDecoder?
+    var decoderFormat: AVAudioFormat?
+    var converter: AVAudioConverter?
+    var decoderEnded = false
+    var pendingBuffers = 0
+
+    var segmentStart: AVAudioFramePosition = 0
+    var pausedTime: Double = 0
+    var generation = 0
+
+    var hasSource: Bool { file != nil || decoder != nil }
+
+    var sampleRate: Double {
+        if let f = file { return f.processingFormat.sampleRate }
+        if let fmt = decoderFormat { return fmt.sampleRate }
+        return 44_100
+    }
+
+    var lengthFrames: AVAudioFramePosition {
+        if let f = file { return f.length }
+        if let d = decoder { return max(0, d.length) }
+        return 0
+    }
+
+    var duration: Double { hasSource ? Double(lengthFrames) / sampleRate : 0 }
+
+    func closeSource() {
+        if let d = decoder { try? d.close() }
+        file = nil
+        decoder = nil
+        decoderFormat = nil
+        converter = nil
+        decoderEnded = false
+        pendingBuffers = 0
+    }
+}
+
+/// Motore audio: due piatti (player -> velocità/tono) -> mixer -> EQ (10 bande + bassi) -> uscita.
 ///
-/// I file che iOS sa aprire da solo passano da AVAudioFile. Gli altri (estensione sbagliata, Opus, Ogg Vorbis,
-/// WavPack, ...) vengono decodificati a pezzi con SFBAudioEngine, che riconosce il formato dal contenuto.
+/// I file che iOS sa aprire passano da AVAudioFile; gli altri (estensione sbagliata, Opus, Ogg, WavPack...)
+/// vengono decodificati a pezzi con SFBAudioEngine.
 final class AudioEngine {
     static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
     let engine = AVAudioEngine()
-    private let player = AVAudioPlayerNode()
-    private let timePitch = AVAudioUnitTimePitch()
+    private let deckMixer = AVAudioMixerNode()
     private let eq = AVAudioUnitEQ(numberOfBands: 11)
-
-    private var file: AVAudioFile?
-    private var decoder: AudioDecoder?
-    private var decoderFormat: AVAudioFormat?
-    private var converter: AVAudioConverter?
-    private var decoderEnded = false
-    private var pendingBuffers = 0
+    private let decks = [Deck(), Deck()]
+    private var currentIndex = 0
+    private var current: Deck { decks[currentIndex] }
+    private var other: Deck { decks[1 - currentIndex] }
     private let bufferFrames: AVAudioFrameCount = 32_768
 
-    private var connectedFormat: AVAudioFormat?
-    private var segmentStart: AVAudioFramePosition = 0
-    private var pausedTime: Double = 0
-    private var generation = 0
+    private var crossfadeTimer: Timer?
+    private var crossfadeStep = 0
+    private var crossfadeSteps = 1
+    private var rate: Float = 1
+    private var pitchCents: Float = 0
+    private var pan: Float = 0
 
-    /// Chiamato sul main thread quando il brano finisce davvero di suonare.
+    /// Chiamato sul main thread quando il brano attuale finisce davvero di suonare.
     var onFinished: (() -> Void)?
 
-    /// true se il brano attuale passa dal decoder di riserva.
-    private(set) var usesFallbackDecoder = false
+    private(set) var isCrossfading = false
 
     init() {
-        engine.attach(player)
-        engine.attach(timePitch)
+        engine.attach(deckMixer)
         engine.attach(eq)
+        for deck in decks {
+            engine.attach(deck.player)
+            engine.attach(deck.pitch)
+            connect(deck, format: nil)
+        }
         for (i, freq) in Self.frequencies.enumerated() {
             let band = eq.bands[i]
             band.filterType = .parametric
@@ -49,76 +95,56 @@ final class AudioEngine {
         bass.frequency = 110
         bass.gain = 0
         bass.bypass = true
-        connect(format: nil)
+        engine.connect(deckMixer, to: eq, format: nil)
+        engine.connect(eq, to: engine.mainMixerNode, format: nil)
         engine.prepare()
     }
 
-    private func connect(format: AVAudioFormat?) {
-        engine.connect(player, to: timePitch, format: format)
-        engine.connect(timePitch, to: eq, format: format)
-        engine.connect(eq, to: engine.mainMixerNode, format: format)
-        connectedFormat = format
+    private func connect(_ deck: Deck, format: AVAudioFormat?) {
+        engine.connect(deck.player, to: deck.pitch, format: format)
+        engine.connect(deck.pitch, to: deckMixer, format: format)
+        deck.connectedFormat = format
     }
 
-    private func reconnectIfNeeded(_ format: AVAudioFormat) {
-        guard connectedFormat?.sampleRate != format.sampleRate || connectedFormat?.channelCount != format.channelCount else { return }
-        if engine.isRunning { engine.stop() }
-        engine.disconnectNodeOutput(player)
-        engine.disconnectNodeOutput(timePitch)
-        engine.disconnectNodeOutput(eq)
-        connect(format: format)
-        engine.prepare()
+    /// Ricollega un piatto se il formato cambia (è a monte di un mixer, quindi si può fare a motore acceso).
+    private func reconnectIfNeeded(_ deck: Deck, _ format: AVAudioFormat) {
+        guard deck.connectedFormat?.sampleRate != format.sampleRate || deck.connectedFormat?.channelCount != format.channelCount else { return }
+        engine.disconnectNodeOutput(deck.player)
+        engine.disconnectNodeOutput(deck.pitch)
+        connect(deck, format: format)
     }
 
     // MARK: Informazioni
 
-    private var sampleRate: Double {
-        if let f = file { return f.processingFormat.sampleRate }
-        if let fmt = decoderFormat { return fmt.sampleRate }
-        return 44_100
-    }
-
-    private var lengthFrames: AVAudioFramePosition {
-        if let f = file { return f.length }
-        if let d = decoder { return max(0, d.length) }
-        return 0
-    }
-
-    private var hasSource: Bool { file != nil || decoder != nil }
-
-    var duration: Double {
-        guard hasSource else { return 0 }
-        return Double(lengthFrames) / sampleRate
-    }
+    var duration: Double { current.duration }
 
     var volume: Float {
         get { engine.mainMixerNode.outputVolume }
         set { engine.mainMixerNode.outputVolume = newValue }
     }
 
-    var currentTime: Double {
-        guard hasSource else { return 0 }
-        guard engine.isRunning, player.isPlaying,
-              let nodeTime = player.lastRenderTime,
-              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return pausedTime }
-        let t = Double(segmentStart) / sampleRate + Double(playerTime.sampleTime) / playerTime.sampleRate
-        let d = duration
+    var currentTime: Double { time(of: current) }
+
+    private func time(of deck: Deck) -> Double {
+        guard deck.hasSource else { return 0 }
+        guard engine.isRunning, deck.player.isPlaying,
+              let nodeTime = deck.player.lastRenderTime,
+              let playerTime = deck.player.playerTime(forNodeTime: nodeTime) else { return deck.pausedTime }
+        let t = Double(deck.segmentStart) / deck.sampleRate + Double(playerTime.sampleTime) / playerTime.sampleRate
+        let d = deck.duration
         return d > 0 ? min(max(0, t), d) : max(0, t)
     }
 
-    // MARK: Caricamento e trasporto
+    // MARK: Caricamento
 
-    func load(url: URL) throws {
-        invalidate()
-        player.stop()
-        closeDecoder()
-        file = nil
-        usesFallbackDecoder = false
-
+    private func open(_ url: URL, into deck: Deck) throws {
+        deck.generation += 1
+        deck.player.stop()
+        deck.closeSource()
         do {
-            let newFile = try AVAudioFile(forReading: url)
-            reconnectIfNeeded(newFile.processingFormat)
-            file = newFile
+            let file = try AVAudioFile(forReading: url)
+            reconnectIfNeeded(deck, file.processingFormat)
+            deck.file = file
         } catch {
             // Estensione sbagliata o formato che iOS non apre da solo: provo con SFBAudioEngine.
             let dec = try AudioDecoder(url: url, detectContentType: true)
@@ -126,161 +152,215 @@ final class AudioEngine {
             let source = dec.processingFormat
             guard let standard = AVAudioFormat(standardFormatWithSampleRate: source.sampleRate,
                                                channels: source.channelCount) else { throw error }
-            converter = source == standard ? nil : AVAudioConverter(from: source, to: standard)
-            reconnectIfNeeded(standard)
-            decoder = dec
-            decoderFormat = standard
-            usesFallbackDecoder = true
+            deck.converter = source == standard ? nil : AVAudioConverter(from: source, to: standard)
+            reconnectIfNeeded(deck, standard)
+            deck.decoder = dec
+            deck.decoderFormat = standard
         }
-        segmentStart = 0
-        pausedTime = 0
+        deck.segmentStart = 0
+        deck.pausedTime = 0
+        deck.player.volume = 1
+        applyEffects(to: deck)
+    }
+
+    func load(url: URL) throws {
+        finishCrossfadeNow()
+        try open(url, into: current)
     }
 
     func unload() {
-        invalidate()
-        player.stop()
-        file = nil
-        closeDecoder()
-        pausedTime = 0
+        finishCrossfadeNow()
+        current.generation += 1
+        current.player.stop()
+        current.closeSource()
+        current.pausedTime = 0
     }
 
-    private func closeDecoder() {
-        if let d = decoder { try? d.close() }
-        decoder = nil
-        decoderFormat = nil
-        converter = nil
-        decoderEnded = false
-        pendingBuffers = 0
-    }
+    // MARK: Trasporto
 
     /// Posiziona il brano; se `play` è true parte subito.
     func start(at time: Double, play: Bool) throws {
-        pausedTime = max(0, time)
+        current.pausedTime = max(0, time)
         if play {
             try self.play()
         } else {
-            invalidate()
-            player.stop()
+            current.generation += 1
+            current.player.stop()
         }
     }
 
-    func play() throws {
-        guard hasSource else { return }
-        invalidate()
-        player.stop()
+    private func startEngineIfNeeded() throws {
         if !engine.isRunning {
             engine.prepare()
             try engine.start()
         }
-        schedule(from: pausedTime)
-        player.play()
+    }
+
+    func play() throws {
+        guard current.hasSource else { return }
+        try startEngineIfNeeded()
+        schedule(current, from: current.pausedTime)
+        current.player.play()
     }
 
     func pause() {
-        pausedTime = currentTime
-        invalidate()
-        player.pause()
+        finishCrossfadeNow()
+        current.pausedTime = currentTime
+        current.generation += 1
+        current.player.pause()
         engine.pause()
     }
 
     func seek(to time: Double, play: Bool) throws {
+        finishCrossfadeNow()
         let d = duration
-        pausedTime = d > 0 ? max(0, min(time, d)) : max(0, time)
+        current.pausedTime = d > 0 ? max(0, min(time, d)) : max(0, time)
         if play {
             try self.play()
         } else {
-            invalidate()
-            player.stop()
+            current.generation += 1
+            current.player.stop()
         }
     }
 
     /// Usato dopo un cambio di configurazione dell'audio (es. cuffie Bluetooth).
     func setPausedTime(_ time: Double) {
-        pausedTime = time
+        finishCrossfadeNow()
+        current.pausedTime = time
     }
 
     func stopPlayback() {
-        pausedTime = currentTime
-        invalidate()
-        player.stop()
+        finishCrossfadeNow()
+        current.pausedTime = currentTime
+        current.generation += 1
+        current.player.stop()
         engine.pause()
     }
 
-    private func invalidate() { generation += 1 }
+    // MARK: Crossfade
 
-    private func finishLater(_ gen: Int) {
+    /// Carica `url` sull'altro piatto e lo fa entrare mentre quello attuale sfuma.
+    /// Da subito il "brano attuale" diventa quello nuovo.
+    func crossfade(to url: URL, duration fadeDuration: Double) throws {
+        finishCrossfadeNow()
+        let outgoing = current
+        let incoming = other
+        try open(url, into: incoming)
+        try startEngineIfNeeded()
+        incoming.player.volume = 0
+        incoming.pausedTime = 0
+        schedule(incoming, from: 0)
+        incoming.player.play()
+
+        // L'uscente non deve più avvisare a fine brano: ormai il brano attuale è l'altro.
+        outgoing.generation += 1
+        currentIndex = 1 - currentIndex
+        isCrossfading = true
+
+        crossfadeSteps = max(1, Int(fadeDuration / 0.05))
+        crossfadeStep = 0
+        crossfadeTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in self?.crossfadeTick() }
+        }
+    }
+
+    private func crossfadeTick() {
+        guard isCrossfading else { return }
+        crossfadeStep += 1
+        let progress = min(1, Float(crossfadeStep) / Float(crossfadeSteps))
+        current.player.volume = progress
+        other.player.volume = 1 - progress
+        if progress >= 1 { finishCrossfadeNow() }
+    }
+
+    /// Chiude subito un crossfade in corso (pausa, salto, nuovo brano...).
+    private func finishCrossfadeNow() {
+        crossfadeTimer?.invalidate()
+        crossfadeTimer = nil
+        guard isCrossfading else { return }
+        isCrossfading = false
+        let outgoing = other
+        outgoing.generation += 1
+        outgoing.player.stop()
+        outgoing.closeSource()
+        outgoing.player.volume = 1
+        current.player.volume = 1
+    }
+
+    // MARK: Programmazione dell'audio
+
+    private func finishLater(_ deck: Deck, _ gen: Int) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, gen == self.generation else { return }
+            guard let self, gen == deck.generation, deck === self.current else { return }
             self.onFinished?()
         }
     }
 
-    private func schedule(from time: Double) {
+    private func schedule(_ deck: Deck, from time: Double) {
+        deck.generation += 1
+        deck.player.stop()
+        let gen = deck.generation
         let safeTime = time.isFinite ? max(0, time) : 0
-        let start = max(0, min(AVAudioFramePosition(safeTime * sampleRate), lengthFrames))
-        invalidate()
-        let gen = generation
+        let start = max(0, min(AVAudioFramePosition(safeTime * deck.sampleRate), deck.lengthFrames))
 
-        if let f = file {
+        if let f = deck.file {
             let frames = AVAudioFrameCount(max(0, f.length - start))
-            segmentStart = start
-            guard frames > 0 else { finishLater(gen); return }
-            player.scheduleSegment(f, startingFrame: start, frameCount: frames, at: nil,
-                                   completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            deck.segmentStart = start
+            guard frames > 0 else { finishLater(deck, gen); return }
+            deck.player.scheduleSegment(f, startingFrame: start, frameCount: frames, at: nil,
+                                        completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, gen == self.generation else { return }
+                    guard let self, gen == deck.generation, deck === self.current else { return }
                     self.onFinished?()
                 }
             }
             return
         }
 
-        guard let dec = decoder else { return }
-        if dec.supportsSeeking {
-            try? dec.seek(to: start)
-        }
-        segmentStart = max(0, dec.position)
-        decoderEnded = false
-        pendingBuffers = 0
-        for _ in 0..<4 { scheduleNextDecodedBuffer(gen) }
-        if pendingBuffers == 0 { finishLater(gen) }
+        guard let dec = deck.decoder else { return }
+        if dec.supportsSeeking { try? dec.seek(to: start) }
+        deck.segmentStart = max(0, dec.position)
+        deck.decoderEnded = false
+        deck.pendingBuffers = 0
+        for _ in 0..<4 { scheduleNextDecodedBuffer(deck, gen) }
+        if deck.pendingBuffers == 0 { finishLater(deck, gen) }
     }
 
     /// Decodifica e accoda il prossimo pezzo; quando un pezzo finisce ne accoda un altro.
-    private func scheduleNextDecodedBuffer(_ gen: Int) {
-        guard gen == generation, !decoderEnded, let dec = decoder, let outFormat = decoderFormat,
+    private func scheduleNextDecodedBuffer(_ deck: Deck, _ gen: Int) {
+        guard gen == deck.generation, !deck.decoderEnded, let dec = deck.decoder, let outFormat = deck.decoderFormat,
               let raw = AVAudioPCMBuffer(pcmFormat: dec.processingFormat, frameCapacity: bufferFrames) else { return }
         do {
             try dec.decode(into: raw, length: bufferFrames)
         } catch {
-            decoderEnded = true
+            deck.decoderEnded = true
             return
         }
         guard raw.frameLength > 0 else {
-            decoderEnded = true
+            deck.decoderEnded = true
             return
         }
         var buffer = raw
-        if let converter {
+        if let converter = deck.converter {
             guard let converted = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: raw.frameLength) else {
-                decoderEnded = true
+                deck.decoderEnded = true
                 return
             }
             do {
                 try converter.convert(to: converted, from: raw)
             } catch {
-                decoderEnded = true
+                deck.decoderEnded = true
                 return
             }
             buffer = converted
         }
-        pendingBuffers += 1
-        player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
+        deck.pendingBuffers += 1
+        deck.player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
-                guard let self, gen == self.generation else { return }
-                self.pendingBuffers -= 1
-                self.scheduleNextDecodedBuffer(gen)
-                if self.decoderEnded && self.pendingBuffers == 0 {
+                guard let self, gen == deck.generation else { return }
+                deck.pendingBuffers -= 1
+                self.scheduleNextDecodedBuffer(deck, gen)
+                if deck.decoderEnded && deck.pendingBuffers == 0 && deck === self.current {
                     self.onFinished?()
                 }
             }
@@ -305,12 +385,20 @@ final class AudioEngine {
     }
 
     func setRate(_ rate: Float, pitchCents: Float) {
-        timePitch.rate = rate
-        timePitch.pitch = pitchCents
-        timePitch.bypass = rate == 1 && pitchCents == 0
+        self.rate = rate
+        self.pitchCents = pitchCents
+        decks.forEach(applyEffects)
     }
 
     func setBalance(_ pan: Float) {
-        player.pan = max(-1, min(1, pan))
+        self.pan = max(-1, min(1, pan))
+        decks.forEach(applyEffects)
+    }
+
+    private func applyEffects(to deck: Deck) {
+        deck.pitch.rate = rate
+        deck.pitch.pitch = pitchCents
+        deck.pitch.bypass = rate == 1 && pitchCents == 0
+        deck.player.pan = pan
     }
 }

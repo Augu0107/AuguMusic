@@ -126,6 +126,8 @@ final class AppSettings: ObservableObject {
 
     @Published var fadeEnabled: Bool { didSet { defaults.set(fadeEnabled, forKey: "fadeEnabled") } }
     @Published var fadeDuration: Double { didSet { defaults.set(fadeDuration, forKey: "fadeDuration") } }
+    /// Secondi di sovrapposizione tra un brano e il successivo (0 = stacco netto).
+    @Published var crossfadeDuration: Double { didSet { defaults.set(crossfadeDuration, forKey: "crossfadeDuration") } }
     @Published var replayGain: ReplayGainMode { didSet { defaults.set(replayGain.rawValue, forKey: "replayGain") } }
     @Published var replayGainPreamp: Double { didSet { defaults.set(replayGainPreamp, forKey: "replayGainPreamp") } }
 
@@ -164,6 +166,7 @@ final class AppSettings: ObservableObject {
         }
         fadeEnabled = bool("fadeEnabled", false)
         fadeDuration = double("fadeDuration", 0.4)
+        crossfadeDuration = double("crossfadeDuration", 3)
         replayGain = ReplayGainMode(rawValue: d.string(forKey: "replayGain") ?? "") ?? .off
         replayGainPreamp = double("replayGainPreamp", 0)
 

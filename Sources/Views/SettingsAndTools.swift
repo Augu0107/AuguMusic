@@ -441,6 +441,12 @@ struct SettingsView: View {
             }
 
             Section("Riproduzione") {
+                VStack(alignment: .leading) {
+                    Text(settings.crossfadeDuration == 0
+                         ? "Crossfade tra i brani: disattivato"
+                         : "Crossfade tra i brani: \(Int(settings.crossfadeDuration)) s")
+                    Slider(value: $settings.crossfadeDuration, in: 0...12, step: 1)
+                }
                 Toggle("Dissolvenza su play e pausa", isOn: $settings.fadeEnabled)
                 if settings.fadeEnabled {
                     VStack(alignment: .leading) {

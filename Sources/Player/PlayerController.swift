@@ -307,6 +307,7 @@ final class PlayerController: ObservableObject {
         if let a = abRepeat.a, let b = abRepeat.b, b > a, t >= b {
             seek(to: a)
         }
+        startCrossfadeIfNeeded(currentTime: t)
         if let timer = sleepTimer, case .at(let date) = timer.mode, Date() >= date {
             if timer.finishCurrentSong {
                 sleepTimer = SleepTimer(mode: .afterCurrentSong, finishCurrentSong: false)
@@ -356,6 +357,49 @@ final class PlayerController: ObservableObject {
                 endOfQueue(qi)
             }
         }
+        persist()
+    }
+
+    /// Quando mancano pochi secondi alla fine, fa entrare il brano successivo sovrapposto.
+    private func startCrossfadeIfNeeded(currentTime t: Double) {
+        let fade = settings.crossfadeDuration
+        guard fade > 0, !audio.isCrossfading, abRepeat.b == nil, duration > fade * 2,
+              let qi = activeQueueIndex, duration - t <= fade, duration - t > 0.3 else { return }
+        if let timer = sleepTimer {
+            switch timer.mode {
+            case .afterCurrentSong: return
+            case .afterSongs(let n) where n <= 1: return
+            default: break
+            }
+        }
+        var nextIndex = queues[qi].index + 1
+        switch repeatMode {
+        case .repeatSong, .stopAfterSong, .jumpToNextQueue:
+            if repeatMode != .jumpToNextQueue || nextIndex >= queues[qi].items.count { return }
+        case .repeatQueue:
+            if nextIndex >= queues[qi].items.count { nextIndex = 0 }
+        case .stopAfterQueue:
+            if nextIndex >= queues[qi].items.count { return }
+        }
+        guard queues[qi].items.indices.contains(nextIndex),
+              let next = library.byID[queues[qi].items[nextIndex]],
+              let url = library.url(for: next) else { return }
+        do {
+            try audio.crossfade(to: url, duration: fade)
+        } catch {
+            return // il brano successivo partirà normalmente alla fine
+        }
+        if case .afterSongs(let n)? = sleepTimer?.mode { sleepTimer?.mode = .afterSongs(n - 1) }
+        queues[qi].index = nextIndex
+        queues[qi].elapsed = 0
+        loadedTrackID = next.id
+        duration = audio.duration
+        abRepeat = ABRepeat()
+        listenedSeconds = 0
+        playCounted = false
+        applyReplayGain()
+        loadNowPlayingArtwork(track: next, url: url)
+        updateNowPlaying()
         persist()
     }
 
