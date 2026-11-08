@@ -27,7 +27,7 @@ struct AlbumDetailView: View {
     @EnvironmentObject private var player: PlayerController
     @State private var filterKind: FilterKind = .artists
     @State private var selectedName: String?
-    @State private var query = ""
+    @State private var showSearch = false
 
     private func names(for t: Track) -> [String] {
         switch filterKind {
@@ -53,9 +53,7 @@ struct AlbumDetailView: View {
             for n in names(for: t) where seen.insert(n.lowercased()).inserted { people.append(n) }
         }
         let byPerson = selectedName.map { sel in all.filter { names(for: $0).contains { $0.caseInsensitiveCompare(sel) == .orderedSame } } } ?? all
-        let shown = query.isEmpty ? byPerson : byPerson.filter {
-            $0.displayTitle.matchesSearch(query) || $0.displayArtist.matchesSearch(query)
-        }
+        let shown = byPerson
 
         return List {
             VStack(alignment: .leading, spacing: 12) {
@@ -116,7 +114,12 @@ struct AlbumDetailView: View {
         .selectionScope(shown)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) { searchBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SearchFieldButton(prompt: "Cerca nell'album") { showSearch = true }
+        }
+        .sheet(isPresented: $showSearch) {
+            SongSearchSheet(tracks: all, sourceName: album.name)
+        }
         .onChange(of: filterKind) { _, _ in selectedName = nil }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -131,29 +134,6 @@ struct AlbumDetailView: View {
                 }
             }
         }
-    }
-
-    /// Barra di ricerca ancorata in fondo, sotto la lista.
-    private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Cerca nell'album", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.bar)
     }
 
     /// Riquadro bianco con bordino grigio e, 2px sotto, una lineetta.

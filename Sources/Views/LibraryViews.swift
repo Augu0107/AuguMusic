@@ -257,6 +257,7 @@ struct SearchFieldButton: View {
 }
 
 /// Pannello di ricerca di Artisti/Album: campo di testo in alto e risultati sotto, separati da lineette.
+/// Si chiude toccando un risultato o toccando l'app fuori dal pannello.
 struct GroupSearchSheet: View {
     let kind: GroupKind
     @EnvironmentObject private var library: LibraryStore
@@ -267,35 +268,66 @@ struct GroupSearchSheet: View {
     var body: some View {
         let all = library.groups(of: kind)
         let results = query.isEmpty ? all : all.filter { $0.name.matchesSearch(query) }
-        NavigationStack {
-            List(results) { group in
-                Button {
-                    dismiss()
-                    let route = Route.group(kind, group.id)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ui.navigate(route) }
-                } label: {
-                    HStack(spacing: 12) {
-                        if kind == .album {
-                            ArtworkView(track: library.byID[group.trackIDs.first ?? ""], maxPixel: 90, cornerRadius: 3, mode: .fill)
-                                .frame(width: 30, height: 30)
-                        }
-                        Text(group.name).lineLimit(1)
-                        Spacer()
+        List(results) { group in
+            Button {
+                dismiss()
+                let route = Route.group(kind, group.id)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ui.navigate(route) }
+            } label: {
+                HStack(spacing: 12) {
+                    if kind == .album {
+                        ArtworkView(track: library.byID[group.trackIDs.first ?? ""], maxPixel: 90, cornerRadius: 3, mode: .fill)
+                            .frame(width: 30, height: 30)
                     }
-                    .contentShape(Rectangle())
+                    Text(group.name).lineLimit(1)
+                    Spacer()
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
-            .listStyle(.plain)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                WideSearchField(text: $query, prompt: kind == .album ? "Cerca album" : "Cerca \(kind.title.lowercased())",
-                                autoFocus: true)
+            .buttonStyle(.plain)
+        }
+        .listStyle(.plain)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            WideSearchField(text: $query, prompt: kind == .album ? "Cerca album" : "Cerca \(kind.title.lowercased())",
+                            autoFocus: true)
+        }
+    }
+}
+
+/// Pannello di ricerca dei brani (es. dentro un album): toccando un brano parte da lì.
+struct SongSearchSheet: View {
+    let tracks: [Track]
+    let sourceName: String
+    @EnvironmentObject private var player: PlayerController
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    var body: some View {
+        let results = query.isEmpty ? tracks : tracks.filter {
+            $0.displayTitle.matchesSearch(query) || $0.displayArtist.matchesSearch(query)
+        }
+        List(results) { track in
+            Button {
+                let index = tracks.firstIndex(where: { $0.id == track.id }) ?? 0
+                player.play(tracks, startAt: index, source: sourceName)
+                dismiss()
+            } label: {
+                HStack(spacing: 12) {
+                    ArtworkView(track: track, maxPixel: 90, cornerRadius: 3, mode: .fill)
+                        .frame(width: 30, height: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(track.displayTitle).lineLimit(1)
+                        Text(track.displayArtist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
-            .navigationTitle(kind.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
-            }
+            .buttonStyle(.plain)
+        }
+        .listStyle(.plain)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            WideSearchField(text: $query, prompt: "Cerca brani", autoFocus: true)
         }
     }
 }
