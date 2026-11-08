@@ -100,8 +100,9 @@ struct AlbumGridView: View {
                         ForEach(albums) { album in
                             NavigationLink(value: Route.group(.album, album.id)) {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 10)
+                                    ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 10, mode: .natural)
                                         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+                                        .frame(maxWidth: .infinity, maxHeight: 280, alignment: .bottom)
                                     Text(album.name)
                                         .font(.subheadline.weight(.semibold))
                                         .lineLimit(1)
@@ -209,8 +210,8 @@ struct TrackListScreen: View {
         List {
             if let headerTrackID, query.isEmpty {
                 HStack(alignment: .bottom, spacing: 18) {
-                    ArtworkView(track: library.byID[headerTrackID], maxPixel: 500, cornerRadius: 12)
-                        .frame(width: 170, height: 170)
+                    ArtworkView(track: library.byID[headerTrackID], maxPixel: 500, cornerRadius: 12, mode: .natural)
+                        .frame(maxWidth: 190, maxHeight: 240, alignment: .bottomLeading)
                         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title).font(.title2.bold()).lineLimit(3)

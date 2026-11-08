@@ -2,32 +2,61 @@ import SwiftUI
 
 // MARK: - Copertina
 
+enum ArtworkMode {
+    /// Riempie un quadrato tagliando i bordi (solo per lo sfondo sfocato).
+    case fill
+    /// Sta tutta dentro un quadrato, senza tagli (righe degli elenchi).
+    case fitInSquare
+    /// Prende la forma dell'immagine: rettangolare, verticale o quadrata (come Musicolet).
+    case natural
+}
+
 struct ArtworkView: View {
     @EnvironmentObject private var library: LibraryStore
     let track: Track?
     var maxPixel: CGFloat = 150
     var cornerRadius: CGFloat = 6
+    var mode: ArtworkMode = .fitInSquare
 
     @State private var image: UIImage?
 
     var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    placeholder
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        content
             .task(id: track?.id) {
                 image = nil
                 guard let track, let url = library.url(for: track) else { return }
                 image = await ArtworkLoader.shared.image(for: track, url: url, maxPixel: maxPixel)
             }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if mode == .natural, let image {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    if let image {
+                        if mode == .fill {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        }
+                    } else {
+                        placeholder
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
     }
 
     private var placeholder: some View {

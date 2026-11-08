@@ -95,7 +95,7 @@ struct NowPlayingView: View {
         ZStack {
             Color(uiColor: .systemBackground)
             if settings.theme == .black { Color.black }
-            ArtworkView(track: player.currentTrack, maxPixel: 300, cornerRadius: 0)
+            ArtworkView(track: player.currentTrack, maxPixel: 300, cornerRadius: 0, mode: .fill)
                 .scaleEffect(1.6)
                 .blur(radius: 70)
                 .opacity(settings.theme == .black ? 0.25 : 0.45)
@@ -177,8 +177,9 @@ struct NowPlayingView: View {
                         .aspectRatio(1, contentMode: .fit)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 } else {
-                    ArtworkView(track: player.currentTrack, maxPixel: 1000, cornerRadius: 16)
+                    ArtworkView(track: player.currentTrack, maxPixel: 1000, cornerRadius: 16, mode: .natural)
                         .shadow(color: .black.opacity(0.3), radius: 18, y: 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .onTapGesture {

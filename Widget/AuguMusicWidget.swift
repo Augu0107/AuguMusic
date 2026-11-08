@@ -57,7 +57,8 @@ struct NowPlayingWidgetView: View {
     private var artwork: some View {
         Group {
             if let image = entry.artwork {
-                Image(uiImage: image).resizable().scaledToFill()
+                Image(uiImage: image).resizable().scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             } else {
                 ZStack {
                     Color.white.opacity(0.12)

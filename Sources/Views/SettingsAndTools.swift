@@ -269,8 +269,8 @@ struct TrackInfoView: View {
                 Section {
                     HStack {
                         Spacer()
-                        ArtworkView(track: track, maxPixel: 600, cornerRadius: 12)
-                            .frame(width: 200, height: 200)
+                        ArtworkView(track: track, maxPixel: 600, cornerRadius: 12, mode: .natural)
+                            .frame(maxWidth: 220, maxHeight: 260)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
