@@ -97,18 +97,89 @@ struct GroupRow: View {
     }
 }
 
+// MARK: - Scheda Artisti (artisti / artisti album / compositori)
+
+struct ArtistsTabView: View {
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: PlayerController
+    @AppStorage("artistsTabMode") private var modeRaw = GroupKind.artist.rawValue
+    @State private var showSearch = false
+
+    private let modes: [GroupKind] = [.artist, .albumArtist, .composer]
+    private var mode: GroupKind { GroupKind(rawValue: modeRaw) ?? .artist }
+
+    var body: some View {
+        let groups = library.groups(of: mode)
+        List(groups) { group in
+            NavigationLink(value: Route.group(mode, group.id)) {
+                GroupRow(group: group)
+            }
+            .listRowSeparator(.hidden)
+            .contextMenu {
+                TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false)
+            }
+        }
+        .listStyle(.plain)
+        .themedBackground()
+        .overlay {
+            if groups.isEmpty { LibraryEmptyView() }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    ForEach(modes, id: \.self) { kind in
+                        let selected = kind == mode
+                        let title = kind == .artist ? "Artisti" : kind == .albumArtist ? "Artisti album" : "Compositori"
+                        Button { modeRaw = kind.rawValue } label: {
+                            Text(title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(selected ? Color.white : Color.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(selected ? Color.accentColor : Color(uiColor: .systemBackground),
+                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(selected ? Color.accentColor : Color(uiColor: .systemGray4), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color(uiColor: .systemBackground))
+                SearchFieldButton(prompt: "Cerca \(mode == .artist ? "artisti" : mode == .albumArtist ? "artisti album" : "compositori")") {
+                    showSearch = true
+                }
+            }
+        }
+        .sheet(isPresented: $showSearch) { GroupSearchSheet(kind: mode) }
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    player.shuffleAndPlay(groups.flatMap { library.tracks(for: $0.trackIDs) }, source: mode.title)
+                } label: {
+                    Label("Casuale", systemImage: "shuffle")
+                }
+                .disabled(groups.isEmpty)
+            }
+        }
+    }
+}
+
 // MARK: - Griglia album
 
 struct AlbumGridView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerController
-    @State private var query = ""
+    @State private var showSearch = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
 
     var body: some View {
         let all = library.groups(of: .album)
-        let albums = query.isEmpty ? all : all.filter { $0.name.matchesSearch(query) || $0.subtitle.matchesSearch(query) }
+        let albums = all
         Group {
             if all.isEmpty {
                 LibraryEmptyView()
@@ -129,10 +200,11 @@ struct AlbumGridView: View {
                 }
                 .themedBackground()
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    WideSearchField(text: $query, prompt: "Cerca album")
+                    SearchFieldButton(prompt: "Cerca album") { showSearch = true }
                 }
             }
         }
+        .sheet(isPresented: $showSearch) { GroupSearchSheet(kind: .album) }
         .navigationTitle("Album")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -160,10 +232,80 @@ struct AlbumCard: View {
     }
 }
 
+/// Sembra una barra di ricerca larga quanto lo schermo; toccandola si apre il pannello di ricerca.
+struct SearchFieldButton: View {
+    let prompt: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                Text(prompt)
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .overlay(alignment: .bottom) { Divider() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Pannello di ricerca di Artisti/Album: campo di testo in alto e risultati sotto, separati da lineette.
+struct GroupSearchSheet: View {
+    let kind: GroupKind
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var ui: UIState
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    var body: some View {
+        let all = library.groups(of: kind)
+        let results = query.isEmpty ? all : all.filter { $0.name.matchesSearch(query) }
+        NavigationStack {
+            List(results) { group in
+                Button {
+                    dismiss()
+                    let route = Route.group(kind, group.id)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ui.navigate(route) }
+                } label: {
+                    HStack(spacing: 12) {
+                        if kind == .album {
+                            ArtworkView(track: library.byID[group.trackIDs.first ?? ""], maxPixel: 90, cornerRadius: 3, mode: .fill)
+                                .frame(width: 30, height: 30)
+                        }
+                        Text(group.name).lineLimit(1)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                WideSearchField(text: $query, prompt: kind == .album ? "Cerca album" : "Cerca \(kind.title.lowercased())",
+                                autoFocus: true)
+            }
+            .navigationTitle(kind.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
+            }
+        }
+    }
+}
+
 /// Barra di ricerca larga quanto tutto lo schermo.
 struct WideSearchField: View {
     @Binding var text: String
     let prompt: String
+    var autoFocus = false
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -172,6 +314,12 @@ struct WideSearchField: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
+                .focused($focused)
+                .onAppear {
+                    if autoFocus {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focused = true }
+                    }
+                }
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
@@ -352,46 +500,36 @@ struct SearchView: View {
 
     private func searchSongs(_ q: String) -> [Track] {
         guard !q.isEmpty else { return [] }
-        return Array(library.tracks.filter {
+        return library.tracks.filter {
             $0.displayTitle.matchesSearch(q) || $0.displayArtist.matchesSearch(q) || $0.displayAlbum.matchesSearch(q) || $0.fileName.matchesSearch(q)
-        }.prefix(200))
+        }
     }
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
+        let songs = searchSongs(q)
         List {
-            if !q.isEmpty {
-                let songs = searchSongs(q)
-                if !songs.isEmpty {
-                    Section("Brani (\(songs.count))") {
-                        ForEach(Array(songs.prefix(30).enumerated()), id: \.offset) { index, track in
-                            TrackListRow(track: track, isCurrent: player.loadedTrackID == track.id,
-                                         sourceName: "Ricerca: \(q)") {
-                                player.play(songs, startAt: index, source: "Ricerca: \(q)")
-                            }
-                        }
-                    }
-                }
-                ForEach([GroupKind.album, .artist, .albumArtist, .folder, .genre, .composer], id: \.self) { kind in
-                    let matches = library.groups(of: kind).filter { $0.name.matchesSearch(q) }.prefix(15)
-                    if !matches.isEmpty {
-                        Section(kind.title) {
-                            ForEach(Array(matches)) { group in
-                                NavigationLink(value: Route.group(kind, group.id)) { GroupRow(group: group) }
-                            }
-                        }
-                    }
+            ForEach(Array(songs.prefix(500).enumerated()), id: \.offset) { index, track in
+                TrackListRow(track: track, isCurrent: player.loadedTrackID == track.id,
+                             sourceName: "Ricerca: \(q)") {
+                    player.play(songs, startAt: index, source: "Ricerca: \(q)")
                 }
             }
         }
+        .listStyle(.plain)
         .themedBackground()
-        .selectionScope(searchSongs(q))
-        .navigationTitle("Cerca")
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Brani, album, artisti, cartelle")
+        .selectionScope(songs)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            WideSearchField(text: $query, prompt: "Cerca tra tutti i brani", autoFocus: true)
+        }
+        .navigationTitle(q.isEmpty ? "Cerca brani" : "\(songs.count) brani")
+        .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if q.isEmpty {
-                ContentUnavailableView("Cerca nella libreria", systemImage: "magnifyingglass",
-                                       description: Text("Titoli, artisti, album, cartelle, generi e compositori."))
+                ContentUnavailableView("Cerca brani", systemImage: "magnifyingglass",
+                                       description: Text("Per titolo, artista, album o nome del file."))
+            } else if songs.isEmpty {
+                ContentUnavailableView.search(text: q)
             }
         }
     }

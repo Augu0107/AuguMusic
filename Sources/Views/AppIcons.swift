@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Icone stile Musicolet. Dove SF Symbols ha già la forma giusta uso quella, il resto è disegnato.
 enum AppGlyph: Hashable {
-    case queue, nowPlaying, folders, albums, artists, genres, playlists, albumArtists, composers, more
+    case queue, nowPlaying, folders, albums, artists, genres, playlists, albumArtists, composers, more, search
     case allSongs, favorites, recentlyAdded, recentlyPlayed, mostPlayed, neverPlayed, playlist
 }
 
@@ -38,6 +38,8 @@ struct AppIconView: View {
             symbol("music.quarternote.3")
         case .more:
             symbol("ellipsis")
+        case .search:
+            symbol("magnifyingglass")
         case .allSongs:
             ZStack {
                 RoundedRectangle(cornerRadius: size * 0.12, style: .continuous)

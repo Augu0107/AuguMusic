@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Schede della barra in basso (come Musicolet).
 enum MainTab: String, Hashable, CaseIterable, Identifiable {
-    case queue, nowPlaying, folders, albums, artists, genres, playlists, albumArtists, composers
+    case queue, nowPlaying, folders, albums, artists, genres, playlists, albumArtists, composers, search
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum MainTab: String, Hashable, CaseIterable, Identifiable {
         case .playlists: "Playlist"
         case .albumArtists: "Artisti album"
         case .composers: "Compositori"
+        case .search: "Cerca"
         }
     }
 
@@ -31,11 +32,12 @@ enum MainTab: String, Hashable, CaseIterable, Identifiable {
         case .playlists: .playlists
         case .albumArtists: .albumArtists
         case .composers: .composers
+        case .search: .search
         }
     }
 
     /// Schede che non si possono nascondere.
-    var isRequired: Bool { self == .queue || self == .nowPlaying }
+    var isRequired: Bool { self == .queue || self == .nowPlaying || self == .search }
 
     static func forGroup(_ kind: GroupKind) -> MainTab {
         switch kind {
@@ -96,7 +98,7 @@ struct RootView: View {
                     NowPlayingBackdrop().transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: tab == .nowPlaying)
+            .animation(.easeInOut(duration: 0.15), value: tab == .nowPlaying)
         }
         .overlay(alignment: .top) { scanBanner }
         .overlay { ToastOverlay() }
@@ -176,7 +178,7 @@ struct RootView: View {
         case .albums:
             stack(for: .albums) { AlbumGridView() }
         case .artists:
-            stack(for: .artists) { GroupListView(kind: .artist) }
+            stack(for: .artists) { ArtistsTabView() }
         case .genres:
             stack(for: .genres) { GroupListView(kind: .genre) }
         case .playlists:
@@ -185,23 +187,23 @@ struct RootView: View {
             stack(for: .albumArtists) { GroupListView(kind: .albumArtist) }
         case .composers:
             stack(for: .composers) { GroupListView(kind: .composer) }
+        case .search:
+            stack(for: .search) { SearchView() }
         }
     }
 
     private func pathBinding(_ t: MainTab) -> Binding<NavigationPath> {
-        Binding(get: { paths[t] ?? NavigationPath() }, set: { paths[t] = $0 })
+        // Aprire un album, un artista... non deve avere l'animazione: quella è solo per la barra in basso.
+        Binding(get: { paths[t] ?? NavigationPath() }, set: { newValue in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { paths[t] = newValue }
+        })
     }
 
     private func stack<Content: View>(for t: MainTab, @ViewBuilder _ root: () -> Content) -> some View {
         NavigationStack(path: pathBinding(t)) {
             root()
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        NavigationLink(value: Route.search) {
-                            Image(systemName: "magnifyingglass")
-                        }
-                    }
-                }
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
         }
         .id(t)
@@ -212,13 +214,13 @@ struct RootView: View {
         switch route {
         case .group(let kind, _):
             let preferred = MainTab.forGroup(kind)
-            target = visibleTabs.contains(preferred) ? preferred : (tab == .nowPlaying ? .folders : tab)
+            target = visibleTabs.contains(preferred) ? preferred : (kind == .albumArtist || kind == .composer ? .artists : .folders)
         case .playlist, .favorites, .smart:
             target = .playlists
         case .queue:
             target = .queue
         case .search:
-            target = tab == .nowPlaying ? .folders : tab
+            target = .search
         }
         var p = NavigationPath()
         p.append(route)
@@ -226,11 +228,11 @@ struct RootView: View {
         select(target)
     }
 
-    /// La nuova schermata entra da destra e copre la precedente (circa 0,2 s).
+    /// La nuova schermata entra da destra e copre la precedente (circa 0,15 s).
     private func select(_ t: MainTab) {
         guard t != tab else { return }
         tabChanges += 1
-        withAnimation(.easeOut(duration: 0.2)) { tabRaw = t.rawValue }
+        withAnimation(.easeOut(duration: 0.15)) { tabRaw = t.rawValue }
     }
 
     // MARK: Barra in basso
@@ -297,7 +299,7 @@ struct RootView: View {
             }
             Spacer(minLength: 0)
             AppIconView(glyph: glyph, size: 22)
-                .foregroundStyle(selected ? Color.primary.opacity(0.75) : Color(uiColor: .systemGray3))
+                .foregroundStyle(selected ? Color.primary.opacity(0.75) : Color(uiColor: .systemGray2))
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

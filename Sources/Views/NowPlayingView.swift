@@ -189,39 +189,34 @@ struct NowPlayingView: View {
         }
     }
 
+    /// Titolo centrato, sotto l'artista e sotto ancora l'album (come Musicolet).
     private var titleBlock: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(player.currentTrack?.displayTitle ?? "Niente in riproduzione")
-                    .font(.title2.bold())
-                    .lineLimit(2)
-                if let t = player.currentTrack {
-                    HStack(spacing: 6) {
-                        Button { openArtist(t) } label: {
-                            Text(t.displayArtist).lineLimit(1)
-                        }
-                        Text("—")
-                        Button {
-                            if let albumID = library.albumID(for: t) { ui.navigate(.group(.album, albumID)) }
-                        } label: {
-                            Text(t.displayAlbum).lineLimit(1)
-                        }
-                    }
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .buttonStyle(.plain)
-                }
-            }
-            Spacer()
+        VStack(spacing: 4) {
+            Text(player.currentTrack?.displayTitle ?? "Niente in riproduzione")
+                .font(.title2)
+                .foregroundStyle(Color.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
             if let t = player.currentTrack {
-                Button { userData.toggleFavorite(t.id) } label: {
-                    Image(systemName: userData.isFavorite(t.id) ? "heart.fill" : "heart")
-                        .font(.title2)
-                        .foregroundStyle(userData.isFavorite(t.id) ? Color.pink : Color.secondary)
+                Button { openArtist(t) } label: {
+                    Text(t.displayArtist)
+                        .font(.body)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                Button {
+                    if let albumID = library.albumID(for: t) { ui.navigate(.group(.album, albumID)) }
+                } label: {
+                    Text(t.displayAlbum)
+                        .font(.callout)
+                        .foregroundStyle(Color.secondary.opacity(0.8))
+                        .lineLimit(1)
                 }
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var transportControls: some View {
@@ -263,6 +258,10 @@ struct NowPlayingView: View {
             controlButton(icon: showLyricsInline ? "quote.bubble.fill" : "quote.bubble", label: "Testo",
                           active: showLyricsInline) {
                 withAnimation { showLyricsInline.toggle() }
+            }
+            if let t = player.currentTrack {
+                controlButton(icon: userData.isFavorite(t.id) ? "heart.fill" : "heart", label: "Preferito",
+                              active: userData.isFavorite(t.id)) { userData.toggleFavorite(t.id) }
             }
             controlButton(icon: "slider.vertical.3", label: "EQ", active: settings.eqEnabled) { sheet = .equalizer }
             controlButton(icon: "moon.zzz", label: sleepLabel, active: player.sleepTimer != nil) { sheet = .sleepTimer }
