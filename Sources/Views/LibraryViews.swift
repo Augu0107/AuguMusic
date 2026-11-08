@@ -57,24 +57,41 @@ struct GroupRow: View {
     @EnvironmentObject private var library: LibraryStore
 
     var body: some View {
-        HStack(spacing: 12) {
-            if group.kind == .folder {
+        switch group.kind {
+        case .folder:
+            HStack(spacing: 12) {
                 Image(systemName: "folder.fill")
                     .font(.title2)
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 44, height: 44)
-            } else {
-                ArtworkView(track: library.byID[group.trackIDs.first ?? ""], maxPixel: 132,
-                            cornerRadius: group.kind == .artist || group.kind == .albumArtist ? 22 : 5)
-                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.name).lineLimit(1)
+                    Text("\(group.trackIDs.count) brani · \(group.subtitle)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
+        case .album:
+            HStack(spacing: 12) {
+                ArtworkView(track: library.byID[group.trackIDs.first ?? ""], maxPixel: 132, cornerRadius: 5, mode: .fill)
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.name).lineLimit(1)
+                    Text(formatTime(group.duration))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .artist, .albumArtist, .composer, .genre:
+            // Come Musicolet: solo il nome e la durata totale.
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.name).lineLimit(1)
-                Text(group.kind == .folder ? "\(group.trackIDs.count) brani · \(group.subtitle)" : group.subtitle)
-                    .font(.caption)
+                Text(formatTime(group.duration))
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
+            .padding(.vertical, 2)
         }
     }
 }
@@ -100,16 +117,11 @@ struct AlbumGridView: View {
                         ForEach(albums) { album in
                             NavigationLink(value: Route.group(.album, album.id)) {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 10, mode: .natural)
+                                    ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 10, mode: .fill)
                                         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-                                        .frame(maxWidth: .infinity, maxHeight: 280, alignment: .bottom)
                                     Text(album.name)
                                         .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
-                                    Text(album.subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                        .lineLimit(2)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -244,16 +256,13 @@ struct TrackListScreen: View {
             .disabled(list.isEmpty)
 
             ForEach(Array(list.enumerated()), id: \.offset) { index, track in
-                Button {
-                    player.play(list, startAt: index, source: title)
-                } label: {
-                    TrackRow(track: track,
+                TrackListRow(track: track,
                              isCurrent: player.loadedTrackID == track.id,
                              showArtwork: headerTrackID == nil,
-                             leadingNumber: headerTrackID != nil ? track.trackNumber : nil)
+                             leadingNumber: headerTrackID != nil ? track.trackNumber : nil,
+                             sourceName: title) {
+                    player.play(list, startAt: index, source: title)
                 }
-                .buttonStyle(.plain)
-                .contextMenu { TrackMenu(tracks: [track], sourceName: title) }
                 .swipeActions(edge: .leading) {
                     Button { player.playNext([track]) } label: { Label("Dopo", systemImage: "text.insert") }
                         .tint(.orange)
@@ -266,9 +275,10 @@ struct TrackListScreen: View {
         }
         .listStyle(.plain)
         .themedBackground()
+        .selectionScope(list)
         .navigationTitle(headerTrackID == nil ? title : "")
         .navigationBarTitleDisplayMode(headerTrackID == nil ? .large : .inline)
-        .searchable(text: $query, prompt: "Cerca in questo elenco")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca in questo elenco")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -293,23 +303,25 @@ struct SearchView: View {
     @EnvironmentObject private var player: PlayerController
     @State private var query = ""
 
+    private func searchSongs(_ q: String) -> [Track] {
+        guard !q.isEmpty else { return [] }
+        return Array(library.tracks.filter {
+            $0.displayTitle.matchesSearch(q) || $0.displayArtist.matchesSearch(q) || $0.displayAlbum.matchesSearch(q) || $0.fileName.matchesSearch(q)
+        }.prefix(200))
+    }
+
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
         List {
             if !q.isEmpty {
-                let songs = Array(library.tracks.filter {
-                    $0.displayTitle.matchesSearch(q) || $0.displayArtist.matchesSearch(q) || $0.displayAlbum.matchesSearch(q) || $0.fileName.matchesSearch(q)
-                }.prefix(200))
+                let songs = searchSongs(q)
                 if !songs.isEmpty {
                     Section("Brani (\(songs.count))") {
                         ForEach(Array(songs.prefix(30).enumerated()), id: \.offset) { index, track in
-                            Button {
+                            TrackListRow(track: track, isCurrent: player.loadedTrackID == track.id,
+                                         sourceName: "Ricerca: \(q)") {
                                 player.play(songs, startAt: index, source: "Ricerca: \(q)")
-                            } label: {
-                                TrackRow(track: track, isCurrent: player.loadedTrackID == track.id)
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu { TrackMenu(tracks: [track], sourceName: "Ricerca: \(q)") }
                         }
                     }
                 }
@@ -326,6 +338,7 @@ struct SearchView: View {
             }
         }
         .themedBackground()
+        .selectionScope(searchSongs(q))
         .navigationTitle("Cerca")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Brani, album, artisti, cartelle")
         .overlay {

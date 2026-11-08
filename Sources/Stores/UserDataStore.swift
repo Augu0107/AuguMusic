@@ -121,6 +121,41 @@ final class UIState: ObservableObject {
 
     private var toastTask: Task<Void, Never>?
 
+    // MARK: Selezione multipla (tenere premuto un brano)
+
+    @Published private(set) var selection: [String] = []
+    /// Elenco visibile in quel momento, per "Seleziona tutto" e simili.
+    var selectionScope: [Track] = []
+
+    var isSelecting: Bool { !selection.isEmpty }
+
+    func isSelected(_ id: String) -> Bool { selection.contains(id) }
+
+    func toggleSelection(_ id: String) {
+        if let i = selection.firstIndex(of: id) { selection.remove(at: i) } else { selection.append(id) }
+    }
+
+    func clearSelection() { selection = [] }
+
+    func selectAll() {
+        var set = Set(selection)
+        for t in selectionScope where set.insert(t.id).inserted { selection.append(t.id) }
+    }
+
+    func invertSelection() {
+        let current = Set(selection)
+        selection = selectionScope.map(\.id).filter { !current.contains($0) }
+    }
+
+    /// Seleziona tutto quello che sta tra il primo e l'ultimo brano già selezionati.
+    func selectRange() {
+        let ids = selectionScope.map(\.id)
+        let positions = selection.compactMap { ids.firstIndex(of: $0) }
+        guard let lo = positions.min(), let hi = positions.max(), hi > lo else { return }
+        var set = Set(selection)
+        for id in ids[lo...hi] where set.insert(id).inserted { selection.append(id) }
+    }
+
     func navigate(_ route: Route) {
         pendingRoute = route
     }

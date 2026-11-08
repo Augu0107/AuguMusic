@@ -290,7 +290,7 @@ final class LibraryStore: ObservableObject {
             let artistsSet = Set(sorted.map(\.displayAlbumArtist))
             let subtitle = artistsSet.count == 1 ? (artistsSet.first ?? "") : "Artisti vari"
             return TrackGroup(kind: .album, id: key, name: sorted[0].displayAlbum, subtitle: subtitle,
-                              trackIDs: sorted.map(\.id), year: sorted.compactMap(\.year).max())
+                              trackIDs: sorted.map(\.id), year: sorted.compactMap(\.year).max(), duration: sorted.reduce(0) { $0 + $1.duration })
         }.sorted { $0.name.localizedLess($1.name) }
 
         func groups(_ kind: GroupKind, _ dict: [String: Bucket]) -> [TrackGroup] {
@@ -302,7 +302,7 @@ final class LibraryStore: ObservableObject {
                 let albumCount = Set(sorted.map { albumKeys[$0.id] ?? "" }).count
                 let subtitle = "\(albumCount) album · \(sorted.count) brani"
                 return TrackGroup(kind: kind, id: key, name: bucket.name, subtitle: subtitle,
-                                  trackIDs: sorted.map(\.id), year: nil)
+                                  trackIDs: sorted.map(\.id), year: nil, duration: sorted.reduce(0) { $0 + $1.duration })
             }.sorted { $0.name.localizedLess($1.name) }
         }
         store[.artist] = groups(.artist, artists)
@@ -316,7 +316,7 @@ final class LibraryStore: ObservableObject {
             let name = first.directory.isEmpty ? root : (first.directory as NSString).lastPathComponent
             let path = first.directory.isEmpty ? root : root + "/" + first.directory
             let sorted = ts.sorted { $0.fileName.localizedLess($1.fileName) }
-            return TrackGroup(kind: .folder, id: key, name: name, subtitle: path, trackIDs: sorted.map(\.id), year: nil)
+            return TrackGroup(kind: .folder, id: key, name: name, subtitle: path, trackIDs: sorted.map(\.id), year: nil, duration: sorted.reduce(0) { $0 + $1.duration })
         }.sorted { $0.subtitle.localizedLess($1.subtitle) }
 
         groupStore = store

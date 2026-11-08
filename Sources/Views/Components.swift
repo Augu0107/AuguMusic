@@ -106,16 +106,159 @@ struct TrackRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            if isCurrent {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color.accentColor)
-            }
             Text(formatTime(track.duration))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// Riga di un elenco: tocco = riproduci, tieni premuto = seleziona, tasto ⋯ = menu del brano (come Musicolet).
+struct TrackListRow: View {
+    let track: Track
+    var isCurrent = false
+    var showArtwork = true
+    var leadingNumber: Int? = nil
+    var sourceName: String = "Coda"
+    let onTap: () -> Void
+
+    @EnvironmentObject private var ui: UIState
+
+    var body: some View {
+        let selected = ui.isSelected(track.id)
+        HStack(spacing: 8) {
+            if ui.isSelecting {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+            }
+            TrackRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: leadingNumber)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if ui.isSelecting { ui.toggleSelection(track.id) } else { onTap() }
+                }
+                .onLongPressGesture(minimumDuration: 0.35) {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    ui.toggleSelection(track.id)
+                }
+            TrackMenuButton(tracks: [track], sourceName: sourceName)
+        }
+        .listRowBackground(selected ? Color.accentColor.opacity(0.16) : nil)
+    }
+}
+
+/// Imposta l'elenco usato da "Seleziona tutto" / "Inverti selezione".
+struct SelectionScopeModifier: ViewModifier {
+    let tracks: [Track]
+    @EnvironmentObject private var ui: UIState
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { ui.selectionScope = tracks }
+            .onChange(of: tracks.count) { _, _ in ui.selectionScope = tracks }
+    }
+}
+
+extension View {
+    func selectionScope(_ tracks: [Track]) -> some View { modifier(SelectionScopeModifier(tracks: tracks)) }
+}
+
+/// Pannello in basso quando ci sono brani selezionati.
+struct SelectionBar: View {
+    @EnvironmentObject private var ui: UIState
+    @EnvironmentObject private var library: LibraryStore
+    @State private var expanded = false
+
+    var body: some View {
+        if ui.isSelecting {
+            let tracks = library.tracks(for: ui.selection)
+            let total = tracks.reduce(0) { $0 + $1.duration }
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                            .font(.headline)
+                            .frame(width: 32, height: 32)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tracks.count == 1 ? "1 brano selezionato" : "\(tracks.count) brani selezionati")
+                            .font(.subheadline.weight(.semibold))
+                        Text(formatTime(total))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Menu {
+                        TrackMenu(tracks: tracks, sourceName: "Selezione", showNavigation: false, clearsSelection: true)
+                    } label: {
+                        Label("Opzioni", systemImage: "ellipsis.circle")
+                    }
+                    Menu {
+                        Button { ui.selectAll() } label: { Label("Seleziona tutto", systemImage: "checklist.checked") }
+                        Button { ui.invertSelection() } label: { Label("Inverti selezione", systemImage: "arrow.left.arrow.right") }
+                        Button { ui.selectRange() } label: { Label("Seleziona l'intervallo", systemImage: "arrow.up.and.down") }
+                    } label: {
+                        Label("Selezione avanzata", systemImage: "checklist")
+                    }
+                    Button("Annulla", role: .cancel) {
+                        ui.clearSelection()
+                        expanded = false
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                if expanded {
+                    Divider()
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(tracks) { t in
+                                HStack {
+                                    Text(t.displayTitle).lineLimit(1)
+                                    Spacer()
+                                    Button { ui.toggleSelection(t.id) } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                Divider().padding(.leading, 16)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 260)
+                }
+            }
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
+        }
+    }
+}
+
+/// Quadratino arrotondato con i tre puntini.
+struct TrackMenuButton: View {
+    let tracks: [Track]
+    var sourceName: String = "Coda"
+    var showNavigation = true
+
+    var body: some View {
+        Menu {
+            TrackMenu(tracks: tracks, sourceName: sourceName, showNavigation: showNavigation)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
     }
 }
 
@@ -125,6 +268,8 @@ struct TrackMenu: View {
     let tracks: [Track]
     var sourceName: String = "Coda"
     var showNavigation = true
+    /// Usato dal pannello di selezione: dopo l'azione la selezione si chiude.
+    var clearsSelection = false
 
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var userData: UserDataStore
@@ -133,34 +278,34 @@ struct TrackMenu: View {
 
     var body: some View {
         if tracks.count > 1 {
-            Button { player.play(tracks, startAt: 0, source: sourceName) } label: {
+            Button { player.play(tracks, startAt: 0, source: sourceName); done() } label: {
                 Label("Riproduci", systemImage: "play")
             }
-            Button { player.shuffleAndPlay(tracks, source: sourceName) } label: {
+            Button { player.shuffleAndPlay(tracks, source: sourceName); done() } label: {
                 Label("Riproduci in ordine casuale", systemImage: "shuffle")
             }
         }
-        Button { player.playNext(tracks) } label: {
+        Button { player.playNext(tracks); done() } label: {
             Label("Riproduci dopo", systemImage: "text.insert")
         }
-        Button { player.addToQueue(tracks) } label: {
+        Button { player.addToQueue(tracks); done() } label: {
             Label("Aggiungi alla coda attuale", systemImage: "text.append")
         }
         Menu {
             ForEach(player.queues) { q in
-                Button(q.name) { player.addToQueue(tracks, queueID: q.id) }
+                Button(q.name) { player.addToQueue(tracks, queueID: q.id); done() }
             }
             Divider()
-            Button { player.addToNewQueue(tracks, name: sourceName) } label: {
+            Button { player.addToNewQueue(tracks, name: sourceName); done() } label: {
                 Label("Nuova coda", systemImage: "plus")
             }
         } label: {
             Label("Aggiungi a una coda…", systemImage: "list.number")
         }
-        Button { ui.addToPlaylist = TrackIDList(ids: tracks.map(\.id)) } label: {
+        Button { ui.addToPlaylist = TrackIDList(ids: tracks.map(\.id)); done() } label: {
             Label("Aggiungi a playlist…", systemImage: "music.note.list")
         }
-        Button { ui.tagEditor = TrackIDList(ids: tracks.map(\.id)) } label: {
+        Button { ui.tagEditor = TrackIDList(ids: tracks.map(\.id)); done() } label: {
             Label(tracks.count == 1 ? "Modifica tag…" : "Modifica tag di \(tracks.count) brani…", systemImage: "tag")
         }
         if tracks.count == 1, let t = tracks.first {
@@ -200,10 +345,14 @@ struct TrackMenu: View {
                 Label("Informazioni", systemImage: "info.circle")
             }
         } else {
-            Button { userData.addFavorites(tracks.map(\.id)); ui.showToast("Aggiunti ai preferiti") } label: {
+            Button { userData.addFavorites(tracks.map(\.id)); ui.showToast("Aggiunti ai preferiti"); done() } label: {
                 Label("Aggiungi ai preferiti", systemImage: "heart")
             }
         }
+    }
+
+    private func done() {
+        if clearsSelection { ui.clearSelection() }
     }
 }
 
@@ -231,13 +380,12 @@ struct MiniPlayerBar: View {
                     }
                     Spacer()
                     HStack(spacing: 22) {
-                        Button { player.previous() } label: { Image(systemName: "backward.fill") }
+                        Button { player.previous() } label: { TransportIcon(glyph: .previous, size: 18) }
                         Button { player.togglePlayPause() } label: {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title)
-                                .frame(width: 36)
+                            TransportIcon(glyph: player.isPlaying ? .pause : .play, size: 24)
+                                .frame(width: 36, height: 36)
                         }
-                        Button { player.next() } label: { Image(systemName: "forward.fill") }
+                        Button { player.next() } label: { TransportIcon(glyph: .next, size: 18) }
                     }
                     .font(.title3)
                     .foregroundStyle(.primary)

@@ -82,6 +82,7 @@ struct RootView: View {
                         .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
                 }
             }
+            SelectionBar()
             MiniPlayerBar()
         }
         .overlay(alignment: .top) { scanBanner }
@@ -182,6 +183,8 @@ struct RouteDestination: View {
 
     var body: some View {
         switch route {
+        case .group(.album, let id):
+            AlbumDetailView(albumID: id)
         case .group(let kind, let id):
             if let group = library.group(kind, id: id) {
                 TrackListScreen(title: group.name,

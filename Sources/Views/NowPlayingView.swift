@@ -244,15 +244,14 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             Button { player.previous() } label: {
-                Image(systemName: "backward.fill").font(.title).frame(maxWidth: .infinity, minHeight: 44)
+                TransportIcon(glyph: .previous, size: 26).frame(maxWidth: .infinity, minHeight: 56)
             }
             Button { player.togglePlayPause() } label: {
-                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 70))
-                    .frame(maxWidth: .infinity)
+                TransportIcon(glyph: player.isPlaying ? .pause : .play, size: 44)
+                    .frame(maxWidth: .infinity, minHeight: 72)
             }
             Button { player.next() } label: {
-                Image(systemName: "forward.fill").font(.title).frame(maxWidth: .infinity, minHeight: 44)
+                TransportIcon(glyph: .next, size: 26).frame(maxWidth: .infinity, minHeight: 56)
             }
             Button { player.toggleShuffle() } label: {
                 Image(systemName: "shuffle")

@@ -133,6 +133,7 @@ struct TrackGroup: Identifiable, Hashable {
     let subtitle: String
     let trackIDs: [String]
     let year: Int?
+    var duration: Double = 0
 
     static func == (a: TrackGroup, b: TrackGroup) -> Bool { a.kind == b.kind && a.id == b.id && a.trackIDs.count == b.trackIDs.count }
     func hash(into hasher: inout Hasher) { hasher.combine(kind); hasher.combine(id) }

@@ -121,6 +121,7 @@ struct QueueDetailView: View {
                 }
                 .listStyle(.plain)
                 .themedBackground()
+                .selectionScope(library.tracks(for: q.items))
                 .onAppear { proxy.scrollTo(q.index, anchor: .center) }
                 .onChange(of: q.index) { _, i in
                     withAnimation { proxy.scrollTo(i, anchor: .center) }
@@ -162,19 +163,9 @@ struct QueueDetailView: View {
     private func row(q: PlayQueue, index: Int, id: String) -> some View {
         let isCurrent = q.id == player.activeQueueID && index == q.index
         if let track = library.byID[id] {
-            Button {
+            TrackListRow(track: track, isCurrent: isCurrent, leadingNumber: index + 1, sourceName: q.name) {
                 player.playQueueItem(queueID: queueID, index: index)
-            } label: {
-                HStack(spacing: 10) {
-                    Text("\(index + 1)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 28, alignment: .trailing)
-                    TrackRow(track: track, isCurrent: isCurrent)
-                }
             }
-            .buttonStyle(.plain)
-            .contextMenu { TrackMenu(tracks: [track], sourceName: q.name) }
         } else {
             Text("Brano non disponibile").foregroundStyle(.secondary)
         }
@@ -275,14 +266,10 @@ struct EditableTrackList: View {
 
             ForEach(Array(ids.enumerated()), id: \.offset) { index, id in
                 if let track = library.byID[id] {
-                    Button {
+                    TrackListRow(track: track, isCurrent: player.loadedTrackID == id, sourceName: title) {
                         let playIndex = ids[..<index].filter { library.byID[$0] != nil }.count
                         player.play(available, startAt: playIndex, source: title)
-                    } label: {
-                        TrackRow(track: track, isCurrent: player.loadedTrackID == id)
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu { TrackMenu(tracks: [track], sourceName: title) }
                 } else {
                     Text("Brano non disponibile").foregroundStyle(.secondary)
                 }
@@ -292,6 +279,7 @@ struct EditableTrackList: View {
         }
         .listStyle(.plain)
         .themedBackground()
+        .selectionScope(available)
     }
 }
 

@@ -57,8 +57,10 @@ struct NowPlayingWidgetView: View {
     private var artwork: some View {
         Group {
             if let image = entry.artwork {
-                Image(uiImage: image).resizable().scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Image(uiImage: image)
+                    .resizable()
+                    .fullColorInTintedMode()
+                    .scaledToFill()
             } else {
                 ZStack {
                     Color.white.opacity(0.12)
@@ -92,17 +94,26 @@ struct NowPlayingWidgetView: View {
         .buttonStyle(.plain)
     }
 
+    private func glyphButton<I: AppIntent>(_ intent: I, _ glyph: TransportGlyph, size: CGFloat) -> some View {
+        Button(intent: intent) {
+            TransportIcon(glyph: glyph, size: size)
+                .frame(maxWidth: .infinity, minHeight: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func controls(_ snap: WidgetSnapshot, full: Bool) -> some View {
         HStack(spacing: 0) {
             if full {
                 controlButton(WidgetFavoriteIntent(), snap.isFavorite ? "heart.fill" : "heart", size: .body)
             }
-            controlButton(WidgetPreviousIntent(), "backward.fill")
+            glyphButton(WidgetPreviousIntent(), .previous, size: 18)
             if full { controlButton(WidgetRewindIntent(), "gobackward.10", size: .body) }
-            controlButton(WidgetTogglePlayIntent(), snap.isPlaying ? "pause.circle.fill" : "play.circle.fill", size: .largeTitle)
+            glyphButton(WidgetTogglePlayIntent(), snap.isPlaying ? .pause : .play, size: 28)
                 .foregroundStyle(snap.accentColor)
             if full { controlButton(WidgetForwardIntent(), "goforward.10", size: .body) }
-            controlButton(WidgetNextIntent(), "forward.fill")
+            glyphButton(WidgetNextIntent(), .next, size: 18)
         }
     }
 
@@ -114,17 +125,17 @@ struct NowPlayingWidgetView: View {
                 artwork.frame(width: 58, height: 58)
                 Spacer(minLength: 4)
                 Button(intent: WidgetTogglePlayIntent()) {
-                    Image(systemName: snap.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 34))
+                    TransportIcon(glyph: snap.isPlaying ? .pause : .play, size: 26)
                         .foregroundStyle(snap.accentColor)
+                        .frame(width: 40, height: 40)
                 }
                 .buttonStyle(.plain)
             }
             Spacer(minLength: 0)
             titles(snap, big: false)
             HStack {
-                controlButton(WidgetPreviousIntent(), "backward.fill", size: .callout)
-                controlButton(WidgetNextIntent(), "forward.fill", size: .callout)
+                glyphButton(WidgetPreviousIntent(), .previous, size: 14)
+                glyphButton(WidgetNextIntent(), .next, size: 14)
             }
         }
     }
@@ -199,5 +210,17 @@ struct AuguMusicWidget: Widget {
 struct AuguMusicWidgetBundle: WidgetBundle {
     var body: some Widget {
         AuguMusicWidget()
+    }
+}
+
+extension Image {
+    /// Con il tema "colorato" della Home la copertina resta a colori (come Musica di Apple).
+    @ViewBuilder
+    func fullColorInTintedMode() -> some View {
+        if #available(iOS 18.0, *) {
+            self.widgetAccentedRenderingMode(.fullColor)
+        } else {
+            self
+        }
     }
 }
