@@ -233,17 +233,28 @@ struct SearchFieldButton: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                 Text(prompt)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
-            .frame(maxWidth: .infinity)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .overlay(alignment: .bottom) { Divider() }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .overlay(alignment: .bottom) { HairlineSeparator() }
+    }
+}
+
+/// Linea orizzontale sottile (un Divider qui veniva disegnato in verticale).
+struct HairlineSeparator: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator))
+            .frame(maxWidth: .infinity)
+            .frame(height: 1 / UIScreen.main.scale)
     }
 }
 
@@ -354,7 +365,7 @@ struct WideSearchField: View {
         .padding(.vertical, 11)
         .frame(maxWidth: .infinity)
         .background(Color(uiColor: .secondarySystemBackground))
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) { HairlineSeparator() }
     }
 }
 
