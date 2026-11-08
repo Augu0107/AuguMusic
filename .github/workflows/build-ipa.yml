@@ -6,9 +6,17 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Usa l'Xcode stabile più recente
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Versione di Xcode
+        run: xcodebuild -version
 
       - name: Installa XcodeGen
         run: brew install xcodegen
