@@ -8,9 +8,15 @@ private struct UserDataSnapshot: Codable {
 
 @MainActor
 final class UserDataStore: ObservableObject {
+    static weak var shared: UserDataStore?
+
     @Published var playlists: [Playlist] = [] { didSet { save() } }
     @Published var favorites: [String] = [] {
-        didSet { favoriteSet = Set(favorites); save() }
+        didSet {
+            favoriteSet = Set(favorites)
+            save()
+            PlayerController.shared?.refreshWidget()
+        }
     }
     @Published var bookmarks: [Bookmark] = [] { didSet { save() } }
 
@@ -110,6 +116,7 @@ final class UIState: ObservableObject {
     @Published var pendingRoute: Route?
     @Published var addToPlaylist: TrackIDList?
     @Published var infoTrack: Track?
+    @Published var tagEditor: TrackIDList?
     @Published var toast: String?
 
     private var toastTask: Task<Void, Never>?

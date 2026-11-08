@@ -63,14 +63,15 @@ struct RootView: View {
         VStack(spacing: 0) {
             NavigationSplitView {
                 List(selection: selection) {
-                    Section("Libreria") {
-                        ForEach(SidebarItem.library) { item in
-                            Label(item.title, systemImage: item.icon).tag(item)
+                    let libraryItems = SidebarItem.library.filter { !settings.isTabHidden($0.rawValue) }
+                    if !libraryItems.isEmpty {
+                        Section("Libreria") {
+                            ForEach(libraryItems) { item in sidebarRow(item) }
                         }
                     }
                     Section("Le mie cose") {
-                        ForEach(SidebarItem.personal) { item in
-                            Label(item.title, systemImage: item.icon).tag(item)
+                        ForEach(SidebarItem.personal.filter { !settings.isTabHidden($0.rawValue) }) { item in
+                            sidebarRow(item)
                         }
                     }
                 }
@@ -94,7 +95,18 @@ struct RootView: View {
         .sheet(item: $ui.infoTrack) { track in
             TrackInfoView(track: track)
         }
+        .sheet(item: $ui.tagEditor) { list in
+            TagEditorView(trackIDs: list.ids)
+        }
         .onChange(of: selectionRaw) { _, _ in path = NavigationPath() }
+        .onChange(of: settings.hiddenTabs) { _, hidden in
+            if hidden.contains(selectionRaw) {
+                selectionRaw = SidebarItem.allCases.first { !hidden.contains($0.rawValue) }?.rawValue ?? SidebarItem.settings.rawValue
+            }
+        }
+        .onOpenURL { url in
+            if url.host == "nowplaying" { ui.showNowPlaying = true }
+        }
         .onChange(of: ui.pendingRoute) { _, route in
             guard let route else { return }
             ui.showNowPlaying = false
@@ -114,6 +126,21 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.persist() }
         }
+    }
+
+    private func sidebarRow(_ item: SidebarItem) -> some View {
+        Label(item.title, systemImage: item.icon)
+            .tag(item)
+            .contextMenu {
+                if item != .settings {
+                    Button(role: .destructive) {
+                        settings.setTab(item.rawValue, hidden: true)
+                        ui.showToast("\(item.title) nascosta. La riattivi da Impostazioni.")
+                    } label: {
+                        Label("Nascondi \(item.title)", systemImage: "eye.slash")
+                    }
+                }
+            }
     }
 
     @ViewBuilder

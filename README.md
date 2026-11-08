@@ -2,7 +2,7 @@
 
 Lettore musicale offline per iPad (e iPhone) in SwiftUI, ispirato a Musicolet. Uso personale, si installa con AltStore.
 
-## Cosa c'è nella v0.1
+## Cosa c'è
 
 - **Libreria** da una o più cartelle: "Sull'iPad › AuguMusic", iCloud Drive, chiavetta USB-C, disco esterno o server SMB, scelte con il selettore dell'app File
 - Viste **Cartelle, Album, Artisti, Artisti album, Generi, Compositori, Brani**, più una ricerca globale

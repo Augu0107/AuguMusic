@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum NowPlayingSheet: String, Identifiable {
-    case equalizer, sleepTimer, playback, queue, bookmarks, info, addToPlaylist
+    case equalizer, sleepTimer, playback, queue, bookmarks, info, addToPlaylist, tagEditor
     var id: String { rawValue }
 }
 
@@ -29,6 +29,7 @@ struct NowPlayingView: View {
     @State private var showLyricsInline = false
     @State private var lyrics: Lyrics?
     @State private var sheet: NowPlayingSheet?
+    @State private var artistChoices: [String] = []
 
     var body: some View {
         GeometryReader { geo in
@@ -65,8 +66,27 @@ struct NowPlayingView: View {
             guard let track = player.currentTrack, let url = library.url(for: track) else { return }
             lyrics = await LyricsLoader.load(url: url)
         }
+        .confirmationDialog("Vai all'artista",
+                            isPresented: Binding(get: { !artistChoices.isEmpty }, set: { if !$0 { artistChoices = [] } }),
+                            titleVisibility: .visible) {
+            ForEach(artistChoices, id: \.self) { name in
+                Button(name) {
+                    ui.navigate(.group(.artist, library.artistID(for: name)))
+                    artistChoices = []
+                }
+            }
+        }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    private func openArtist(_ t: Track) {
+        let names = library.artistNames(for: t)
+        if names.count == 1 {
+            ui.navigate(.group(.artist, library.artistID(for: names[0])))
+        } else {
+            artistChoices = names
+        }
     }
 
     // MARK: Parti
@@ -114,10 +134,11 @@ struct NowPlayingView: View {
             if let t = player.currentTrack {
                 Button { sheet = .info } label: { Label("Informazioni", systemImage: "info.circle") }
                 Button { sheet = .addToPlaylist } label: { Label("Aggiungi a playlist…", systemImage: "music.note.list") }
+                Button { sheet = .tagEditor } label: { Label("Modifica tag…", systemImage: "tag") }
                 if let albumID = library.albumID(for: t) {
                     Button { ui.navigate(.group(.album, albumID)) } label: { Label("Vai all'album", systemImage: "square.stack") }
                 }
-                Button { ui.navigate(.group(.artist, library.artistID(for: t.artistList[0]))) } label: {
+                Button { openArtist(t) } label: {
                     Label("Vai all'artista", systemImage: "music.mic")
                 }
                 Button { ui.navigate(.group(.folder, library.folderID(for: t))) } label: {
@@ -180,10 +201,20 @@ struct NowPlayingView: View {
                     .font(.title2.bold())
                     .lineLimit(2)
                 if let t = player.currentTrack {
-                    Text("\(t.displayArtist) — \(t.displayAlbum)")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Button { openArtist(t) } label: {
+                            Text(t.displayArtist).lineLimit(1)
+                        }
+                        Text("—")
+                        Button {
+                            if let albumID = library.albumID(for: t) { ui.navigate(.group(.album, albumID)) }
+                        } label: {
+                            Text(t.displayAlbum).lineLimit(1)
+                        }
+                    }
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.plain)
                 }
             }
             Spacer()
@@ -330,6 +361,8 @@ struct NowPlayingView: View {
             if let t = player.currentTrack { TrackInfoView(track: t) }
         case .addToPlaylist:
             if let t = player.currentTrack { PlaylistPickerSheet(trackIDs: [t.id]) }
+        case .tagEditor:
+            if let t = player.currentTrack { TagEditorView(trackIDs: [t.id]) }
         }
     }
 }

@@ -289,6 +289,7 @@ struct TrackInfoView: View {
                 Section("File") {
                     row("Durata", formatTime(track.duration))
                     row("Formato", track.fileExtension.uppercased())
+                    row("Formato reale", track.formatName ?? "")
                     row("Dimensione", ByteCountFormatter.string(fromByteCount: track.fileSize, countStyle: .file))
                     row("Cartella", library.folderName(track.folderID))
                     row("Percorso", track.relativePath)
@@ -369,6 +370,35 @@ struct SettingsView: View {
                 Text("Copia la musica nella cartella AuguMusic dell'app File (Sull'iPad), oppure aggiungi qualsiasi cartella: iCloud Drive, una chiavetta USB-C, un disco esterno o un server SMB. Scorri a sinistra per rimuovere una cartella.")
             }
 
+            Section {
+                StringListEditor(items: $settings.artistSeparators, placeholder: "Nuovo separatore (es. &, feat., /)", showQuotes: true)
+            } header: {
+                Text("Separatori artisti")
+            } footer: {
+                Text("Con \"&\", \"Karen Méndez & Mike Bahía\" diventano due artisti distinti. Vale per artisti, artisti album e compositori. Gli spazi contano: \" x \" non divide \"Max\".")
+            }
+
+            Section {
+                StringListEditor(items: $settings.artistExceptions, placeholder: "Es. Simon & Garfunkel", showQuotes: false)
+            } header: {
+                Text("Eccezioni (mai divisi)")
+            } footer: {
+                Text("Nomi che contengono un separatore ma sono un solo artista.")
+            }
+
+            Section {
+                ForEach(SidebarItem.allCases.filter { $0 != .settings }) { item in
+                    Toggle(isOn: Binding(get: { !settings.isTabHidden(item.rawValue) },
+                                         set: { settings.setTab(item.rawValue, hidden: !$0) })) {
+                        Label(item.title, systemImage: item.icon)
+                    }
+                }
+            } header: {
+                Text("Schede visibili")
+            } footer: {
+                Text("Puoi anche tenere premuta una scheda nella barra laterale e scegliere \"Nascondi\". Impostazioni resta sempre visibile.")
+            }
+
             Section("Aspetto") {
                 Picker("Tema", selection: $settings.theme) {
                     ForEach(AppTheme.allCases) { Text($0.label).tag($0) }
@@ -379,6 +409,21 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Schermo sempre acceso in riproduzione", isOn: $settings.keepScreenOn)
+            }
+
+            Section {
+                Picker("Colore del widget", selection: $settings.widgetStyle) {
+                    ForEach(WidgetStyle.allCases) { Text($0.label).tag($0) }
+                }
+                if !WidgetBridge.shared.isAvailable {
+                    Text("Il widget non riesce a ricevere i dati: l'App Group non è attivo. Prova a reinstallare l'app con AltStore.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Widget Home")
+            } footer: {
+                Text("Tieni premuto sulla Home dell'iPad → Modifica → Aggiungi widget → AuguMusic.")
             }
 
             Section {
@@ -424,5 +469,44 @@ struct SettingsView: View {
                 library.addFolder(url)
             }
         }
+    }
+}
+
+// MARK: - Editor di elenchi di testo
+
+struct StringListEditor: View {
+    @Binding var items: [String]
+    let placeholder: String
+    let showQuotes: Bool
+    @State private var newItem = ""
+
+    var body: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+            HStack {
+                Text(showQuotes ? "\u{201C}\(item)\u{201D}" : item)
+                    .font(.body.monospaced())
+                Spacer()
+                Button(role: .destructive) {
+                    items.remove(at: index)
+                } label: {
+                    Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        HStack {
+            TextField(placeholder, text: $newItem)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .onSubmit(add)
+            Button("Aggiungi", action: add)
+                .disabled(newItem.isEmpty)
+        }
+    }
+
+    private func add() {
+        guard !newItem.isEmpty, !items.contains(newItem) else { return }
+        items.append(newItem)
+        newItem = ""
     }
 }

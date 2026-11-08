@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import SFBAudioEngine
 
 // MARK: - Lettura dei tag
 
@@ -17,16 +18,54 @@ enum MetadataReader {
             return t
         }
 
-        let asset = AVURLAsset(url: entry.url)
-        if let d = try? await asset.load(.duration), d.isNumeric { t.duration = d.seconds }
-        if let formats = try? await asset.load(.availableMetadataFormats) {
-            for format in formats {
-                if let items = try? await asset.loadMetadata(for: format) {
-                    await apply(items: items, to: &t)
+        if avFoundationExtensions.contains(entry.url.pathExtension.lowercased()) {
+            let asset = AVURLAsset(url: entry.url)
+            if let d = try? await asset.load(.duration), d.isNumeric { t.duration = d.seconds }
+            if let formats = try? await asset.load(.availableMetadataFormats) {
+                for format in formats {
+                    if let items = try? await asset.loadMetadata(for: format) {
+                        await apply(items: items, to: &t)
+                    }
                 }
             }
+            if t.duration > 0 { return t }
         }
+        // iOS non lo apre (formato diverso dall'estensione, Ogg, Opus...): TagLib guarda il contenuto.
+        applyTagLib(url: entry.url, to: &t)
         return t
+    }
+
+    static let avFoundationExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "wav", "aif", "aiff", "aifc", "caf", "alac", "mp4"]
+
+    static func openTagLibFile(_ url: URL) -> AudioFile? {
+        guard let file = try? AudioFile(url: url, detectContentType: true) else { return nil }
+        do {
+            try file.readPropertiesAndMetadata()
+            return file
+        } catch {
+            return nil
+        }
+    }
+
+    static func applyTagLib(url: URL, to t: inout Track) {
+        guard let file = openTagLibFile(url) else { return }
+        let m = file.metadata
+        func take(_ value: String?, _ field: inout String) {
+            if let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty { field = v }
+        }
+        take(m.title, &t.title)
+        take(m.artist, &t.artist)
+        take(m.albumTitle, &t.album)
+        take(m.albumArtist, &t.albumArtist)
+        take(m.composer, &t.composer)
+        take(m.genre, &t.genre)
+        if let y = parseYear(m.releaseDate) { t.year = y }
+        if let n = m.trackNumber, n > 0 { t.trackNumber = n }
+        if let n = m.discNumber, n > 0 { t.discNumber = n }
+        if let g = m.replayGainTrackGain { t.replayGainTrack = g }
+        if let g = m.replayGainAlbumGain { t.replayGainAlbum = g }
+        if let d = file.properties.duration, d > 0 { t.duration = d }
+        t.formatName = file.properties.formatName
     }
 
     static func assetDuration(_ url: URL) async -> Double {
@@ -157,15 +196,17 @@ enum MetadataReader {
             return nil
         }
         let asset = AVURLAsset(url: url)
-        guard let formats = try? await asset.load(.availableMetadataFormats) else { return nil }
-        for format in formats {
-            guard let items = try? await asset.loadMetadata(for: format) else { continue }
-            for item in items {
-                guard let ident = item.identifier,
-                      ident == .id3MetadataUnsynchronizedLyric || ident == .iTunesMetadataLyrics else { continue }
-                if let s = try? await item.load(.stringValue), !s.isEmpty { return s }
+        if let formats = try? await asset.load(.availableMetadataFormats) {
+            for format in formats {
+                guard let items = try? await asset.loadMetadata(for: format) else { continue }
+                for item in items {
+                    guard let ident = item.identifier,
+                          ident == .id3MetadataUnsynchronizedLyric || ident == .iTunesMetadataLyrics else { continue }
+                    if let s = try? await item.load(.stringValue), !s.isEmpty { return s }
+                }
             }
         }
+        if let lyrics = openTagLibFile(url)?.metadata.lyrics, !lyrics.isEmpty { return lyrics }
         return nil
     }
 }

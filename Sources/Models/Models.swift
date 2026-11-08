@@ -22,6 +22,8 @@ struct Track: Codable, Identifiable, Hashable {
     var duration: Double = 0
     var replayGainTrack: Double? = nil
     var replayGainAlbum: Double? = nil
+    /// Formato riconosciuto da TagLib quando l'estensione non basta (nil = normale).
+    var formatName: String? = nil
 
     static func == (a: Track, b: Track) -> Bool { a.id == b.id && a.modified == b.modified }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -35,17 +37,55 @@ struct Track: Codable, Identifiable, Hashable {
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
     var displayAlbumArtist: String { albumArtist.isEmpty ? displayArtist : albumArtist }
 
-    /// Artisti separati (i tag multipli vengono uniti con ";").
-    var artistList: [String] {
-        let parts = artist.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return parts.isEmpty ? [displayArtist] : parts
-    }
     var genreList: [String] {
         let parts = genre.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         return parts.isEmpty ? ["Genere sconosciuto"] : parts
     }
-    var composerList: [String] {
-        composer.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+}
+
+// MARK: - Separatore artisti
+
+enum ArtistSplitter {
+    /// Divide "Karen Méndez & Mike Bahía" in due artisti. Le eccezioni (es. "Simon & Garfunkel") non vengono mai divise.
+    static func split(_ text: String, separators: [String], exceptions: [String]) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        var work = trimmed
+        var protected: [(token: String, original: String)] = []
+        for (i, ex) in exceptions.enumerated() {
+            let exTrim = ex.trimmingCharacters(in: .whitespaces)
+            guard !exTrim.isEmpty else { continue }
+            let token = "\u{E000}\(i)\u{E001}"
+            let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+            if work.range(of: exTrim, options: options) != nil {
+                work = work.replacingOccurrences(of: exTrim, with: token, options: options)
+                protected.append((token, exTrim))
+            }
+        }
+        var parts = [work]
+        for sep in separators where !sep.isEmpty {
+            parts = parts.flatMap { splitCaseInsensitive($0, by: sep) }
+        }
+        var seen = Set<String>()
+        var out: [String] = []
+        for var p in parts {
+            for item in protected { p = p.replacingOccurrences(of: item.token, with: item.original) }
+            let clean = p.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty, seen.insert(clean.lowercased()).inserted else { continue }
+            out.append(clean)
+        }
+        return out
+    }
+
+    private static func splitCaseInsensitive(_ s: String, by sep: String) -> [String] {
+        var result: [String] = []
+        var rest = Substring(s)
+        while let r = rest.range(of: sep, options: .caseInsensitive) {
+            result.append(String(rest[rest.startIndex..<r.lowerBound]))
+            rest = rest[r.upperBound...]
+        }
+        result.append(String(rest))
+        return result
     }
 }
 

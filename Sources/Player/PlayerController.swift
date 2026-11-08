@@ -11,6 +11,8 @@ final class PlaybackClock: ObservableObject {
 
 @MainActor
 final class PlayerController: ObservableObject {
+    static weak var shared: PlayerController?
+
     @Published private(set) var queues: [PlayQueue] = []
     @Published private(set) var activeQueueID: UUID?
     @Published private(set) var isPlaying = false
@@ -41,6 +43,7 @@ final class PlayerController: ObservableObject {
     init(library: LibraryStore, settings: AppSettings) {
         self.library = library
         self.settings = settings
+        Self.shared = self
         if let raw = UserDefaults.standard.string(forKey: "repeatMode"), let mode = RepeatMode(rawValue: raw) {
             repeatMode = mode
         }
@@ -180,6 +183,14 @@ final class PlayerController: ObservableObject {
         queues[qi].index = queues[qi].index + 1 < queues[qi].items.count ? queues[qi].index + 1 : 0
         queues[qi].elapsed = 0
         loadCurrent(autoplay: autoplay)
+    }
+
+    /// Dopo aver modificato i tag del brano in riproduzione: lo riapre dallo stesso punto.
+    func reloadCurrentTrack() {
+        guard loadedTrackID != nil else { return }
+        let time = audio.currentTime
+        let wasPlaying = isPlaying
+        loadCurrent(autoplay: wasPlaying, at: time)
     }
 
     // MARK: Trasporto
@@ -682,6 +693,7 @@ final class PlayerController: ObservableObject {
         let center = MPNowPlayingInfoCenter.default()
         guard let t = currentTrack else {
             center.nowPlayingInfo = nil
+            refreshWidget()
             return
         }
         var info: [String: Any] = [
@@ -701,6 +713,38 @@ final class PlayerController: ObservableObject {
             info[MPMediaItemPropertyArtwork] = Self.makeArtwork(image)
         }
         center.nowPlayingInfo = info
+        refreshWidget()
+    }
+
+    // MARK: Widget
+
+    func toggleCurrentFavorite() {
+        guard let id = loadedTrackID else { return }
+        UserDataStore.shared?.toggleFavorite(id)
+    }
+
+    func refreshWidget() {
+        var upNext: [String] = []
+        var position = ""
+        if let q = activeQueue {
+            position = q.items.isEmpty ? "" : "\(q.index + 1)/\(q.items.count)"
+            let start = q.index + 1
+            if start < q.items.count {
+                for id in q.items[start..<min(q.items.count, start + 9)] {
+                    if let t = library.byID[id] { upNext.append("\(t.displayTitle) — \(t.displayArtist)") }
+                }
+            }
+        }
+        let state = WidgetBridge.State(track: currentTrack,
+                                       artwork: nowPlayingImage,
+                                       isPlaying: isPlaying,
+                                       isFavorite: loadedTrackID.map { UserDataStore.shared?.isFavorite($0) ?? false } ?? false,
+                                       queueName: activeQueue?.name ?? "",
+                                       position: position,
+                                       upNext: upNext,
+                                       style: settings.widgetStyle,
+                                       accent: UIColor(settings.accent.color))
+        WidgetBridge.shared.update(state)
     }
 
     nonisolated private static func makeArtwork(_ image: UIImage) -> MPMediaItemArtwork {

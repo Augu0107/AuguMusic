@@ -131,6 +131,9 @@ struct TrackMenu: View {
         Button { ui.addToPlaylist = TrackIDList(ids: tracks.map(\.id)) } label: {
             Label("Aggiungi a playlist…", systemImage: "music.note.list")
         }
+        Button { ui.tagEditor = TrackIDList(ids: tracks.map(\.id)) } label: {
+            Label(tracks.count == 1 ? "Modifica tag…" : "Modifica tag di \(tracks.count) brani…", systemImage: "tag")
+        }
         if tracks.count == 1, let t = tracks.first {
             Button { userData.toggleFavorite(t.id) } label: {
                 if userData.isFavorite(t.id) {
@@ -146,8 +149,19 @@ struct TrackMenu: View {
                         Label("Vai all'album", systemImage: "square.stack")
                     }
                 }
-                Button { ui.navigate(.group(.artist, library.artistID(for: t.artistList[0]))) } label: {
-                    Label("Vai all'artista", systemImage: "music.mic")
+                let names = library.artistNames(for: t)
+                if names.count == 1 {
+                    Button { ui.navigate(.group(.artist, library.artistID(for: names[0]))) } label: {
+                        Label("Vai all'artista", systemImage: "music.mic")
+                    }
+                } else {
+                    Menu {
+                        ForEach(names, id: \.self) { name in
+                            Button(name) { ui.navigate(.group(.artist, library.artistID(for: name))) }
+                        }
+                    } label: {
+                        Label("Vai all'artista", systemImage: "music.mic")
+                    }
                 }
                 Button { ui.navigate(.group(.folder, library.folderID(for: t))) } label: {
                     Label("Vai alla cartella", systemImage: "folder")

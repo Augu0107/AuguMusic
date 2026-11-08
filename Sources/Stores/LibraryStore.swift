@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct FileEntry: Sendable {
@@ -31,6 +32,41 @@ final class LibraryStore: ObservableObject {
     private var folderCounts: [UUID: Int] = [:]
     private var folderURLs: [UUID: URL] = [:]
     private var didLoad = false
+    private var separators: [String] = [";"]
+    private var exceptions: [String] = []
+    private var cancellables = Set<AnyCancellable>()
+
+    init(settings: AppSettings) {
+        separators = settings.artistSeparators
+        exceptions = settings.artistExceptions
+        settings.$artistSeparators
+            .combineLatest(settings.$artistExceptions)
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] seps, excs in
+                guard let self else { return }
+                self.separators = seps
+                self.exceptions = excs
+                self.setTracks(self.tracks)
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Artisti di un brano, divisi con i separatori scelti dall'utente.
+    func artistNames(for t: Track) -> [String] {
+        let parts = ArtistSplitter.split(t.artist, separators: separators, exceptions: exceptions)
+        return parts.isEmpty ? [t.displayArtist] : parts
+    }
+
+    func albumArtistNames(for t: Track) -> [String] {
+        if t.albumArtist.isEmpty { return artistNames(for: t) }
+        let parts = ArtistSplitter.split(t.albumArtist, separators: separators, exceptions: exceptions)
+        return parts.isEmpty ? [t.displayAlbumArtist] : parts
+    }
+
+    func composerNames(for t: Track) -> [String] {
+        ArtistSplitter.split(t.composer, separators: separators, exceptions: exceptions)
+    }
 
     // MARK: Caricamento
 
@@ -162,6 +198,25 @@ final class LibraryStore: ObservableObject {
         isScanning = false
     }
 
+    /// Rilegge i tag di alcuni brani (dopo il tag editor).
+    func refresh(trackIDs: [String]) async {
+        var entries: [FileEntry] = []
+        for id in trackIDs {
+            guard let t = byID[id], let url = url(for: t) else { continue }
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            entries.append(FileEntry(id: t.id, folderID: t.folderID, url: url, relativePath: t.relativePath,
+                                     size: Int64(values?.fileSize ?? Int(t.fileSize)),
+                                     modified: values?.contentModificationDate ?? Date()))
+        }
+        var updated = byID
+        for e in entries {
+            let added = byID[e.id]?.dateAdded ?? Date()
+            updated[e.id] = await MetadataReader.read(e, dateAdded: added)
+        }
+        setTracks(Array(updated.values))
+        saveTracks()
+    }
+
     // MARK: Indici
 
     private struct Bucket {
@@ -216,10 +271,10 @@ final class LibraryStore: ObservableObject {
             let ak = Self.albumKey(t)
             albumKeys[t.id] = ak
             albums[ak, default: []].append(t)
-            for a in t.artistList { add(&artists, a, t) }
-            add(&albumArtists, t.displayAlbumArtist, t)
+            for a in artistNames(for: t) { add(&artists, a, t) }
+            for a in albumArtistNames(for: t) { add(&albumArtists, a, t) }
             for g in t.genreList { add(&genres, g, t) }
-            for c in t.composerList { add(&composers, c, t) }
+            for c in composerNames(for: t) { add(&composers, c, t) }
             folderBuckets[Self.folderKey(t), default: []].append(t)
         }
         trackAlbumKey = albumKeys
@@ -284,7 +339,10 @@ final class LibraryStore: ObservableObject {
 }
 
 enum LibraryScanner {
-    static let audioExtensions: Set<String> = ["mp3", "m4a", "m4b", "aac", "flac", "wav", "aif", "aiff", "aifc", "caf", "alac"]
+    static let audioExtensions: Set<String> = [
+        "mp3", "m4a", "m4b", "aac", "flac", "wav", "aif", "aiff", "aifc", "caf", "alac",
+        "ogg", "oga", "opus", "spx", "wv", "ape", "mpc", "tta",
+    ]
 
     static func listFiles(roots: [(UUID, URL)]) -> [FileEntry] {
         let fm = FileManager.default

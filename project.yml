@@ -7,14 +7,31 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+packages:
+  SFBAudioEngine:
+    url: https://github.com/sbooth/SFBAudioEngine
+    from: 0.9.1
 targets:
   AuguMusic:
     type: application
     platform: iOS
     sources:
       - path: Sources
+      - path: Shared
+    dependencies:
+      - package: SFBAudioEngine
+      - target: AuguMusicWidget
+    entitlements:
+      path: Support/AuguMusic.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.augugames.augumusic
     info:
       path: Support/Info.plist
       properties:
@@ -27,6 +44,10 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
         UIRequiresFullScreen: false
+        NSPhotoLibraryUsageDescription: Serve per scegliere una copertina dalle tue foto.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.augugames.augumusic
+            CFBundleURLSchemes: [augumusic]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -42,8 +63,30 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGNING_ALLOWED: "NO"
-        CODE_SIGNING_REQUIRED: "NO"
-        CODE_SIGN_IDENTITY: ""
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAIN_APP"
         ENABLE_PREVIEWS: "YES"
+
+  AuguMusicWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    entitlements:
+      path: Support/AuguMusicWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.augugames.augumusic
+    info:
+      path: Support/Widget-Info.plist
+      properties:
+        CFBundleDisplayName: AuguMusic
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.augugames.augumusic.widget
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: "YES"

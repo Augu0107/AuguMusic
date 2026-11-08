@@ -1,5 +1,6 @@
 import AVFoundation
 import ImageIO
+import SFBAudioEngine
 import UIKit
 
 // MARK: - Copertine
@@ -39,6 +40,11 @@ final class ArtworkLoader: @unchecked Sendable {
                     if let data = try? await item.load(.dataValue) { return data }
                 }
             }
+        }
+        // TagLib (file con estensione sbagliata, Ogg, Opus...)
+        if let metadata = MetadataReader.openTagLibFile(url)?.metadata {
+            if let front = metadata.attachedPictures(ofType: .frontCover).first { return front.imageData }
+            if let any = metadata.attachedPictures.first { return any.imageData }
         }
         // Copertina nella cartella (cover.jpg, folder.jpg, ...)
         let dir = url.deletingLastPathComponent()

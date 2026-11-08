@@ -10,7 +10,7 @@ struct AuguMusicApp: App {
 
     init() {
         let settings = AppSettings()
-        let library = LibraryStore()
+        let library = LibraryStore(settings: settings)
         let userData = UserDataStore()
         let player = PlayerController(library: library, settings: settings)
         _settings = StateObject(wrappedValue: settings)
@@ -18,6 +18,11 @@ struct AuguMusicApp: App {
         _userData = StateObject(wrappedValue: userData)
         _player = StateObject(wrappedValue: player)
         _ui = StateObject(wrappedValue: UIState())
+        UserDataStore.shared = userData
+        // Caricati subito: se l'app viene aperta in background da un pulsante del widget, la coda è già pronta.
+        library.loadFromDisk()
+        userData.load()
+        player.restore()
     }
 
     var body: some Scene {
@@ -33,9 +38,6 @@ struct AuguMusicApp: App {
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(settings.accent.color)
                 .task {
-                    library.loadFromDisk()
-                    userData.load()
-                    player.restore()
                     await library.rescan()
                     player.libraryDidChange()
                 }

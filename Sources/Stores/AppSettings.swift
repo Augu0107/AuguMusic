@@ -76,6 +76,18 @@ enum ReplayGainMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum WidgetStyle: String, CaseIterable, Identifiable {
+    case artwork, accent, dark
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .artwork: "Dalla copertina"
+        case .accent: "Colore d'accento"
+        case .dark: "Scuro"
+        }
+    }
+}
+
 struct EQPreset: Identifiable {
     let name: String
     let gains: [Double]
@@ -128,6 +140,11 @@ final class AppSettings: ObservableObject {
     @Published var pitch: Double { didSet { defaults.set(pitch, forKey: "pitch") } }
     @Published var balance: Double { didSet { defaults.set(balance, forKey: "balance") } }
 
+    @Published var artistSeparators: [String] { didSet { defaults.set(artistSeparators, forKey: "artistSeparators") } }
+    @Published var artistExceptions: [String] { didSet { defaults.set(artistExceptions, forKey: "artistExceptions") } }
+    @Published var hiddenTabs: [String] { didSet { defaults.set(hiddenTabs, forKey: "hiddenTabs") } }
+    @Published var widgetStyle: WidgetStyle { didSet { defaults.set(widgetStyle.rawValue, forKey: "widgetStyle") } }
+
     init() {
         let d = UserDefaults.standard
         func double(_ key: String, _ fallback: Double) -> Double { d.object(forKey: key) as? Double ?? fallback }
@@ -157,6 +174,21 @@ final class AppSettings: ObservableObject {
         speed = double("speed", 1)
         pitch = double("pitch", 0)
         balance = double("balance", 0)
+
+        artistSeparators = d.stringArray(forKey: "artistSeparators") ?? [";", "&"]
+        artistExceptions = d.stringArray(forKey: "artistExceptions") ?? []
+        hiddenTabs = d.stringArray(forKey: "hiddenTabs") ?? []
+        widgetStyle = WidgetStyle(rawValue: d.string(forKey: "widgetStyle") ?? "") ?? .artwork
+    }
+
+    func isTabHidden(_ raw: String) -> Bool { hiddenTabs.contains(raw) }
+
+    func setTab(_ raw: String, hidden: Bool) {
+        if hidden {
+            if !hiddenTabs.contains(raw) { hiddenTabs.append(raw) }
+        } else {
+            hiddenTabs.removeAll { $0 == raw }
+        }
     }
 
     func applyPreset(name: String, gains: [Double]) {

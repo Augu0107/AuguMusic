@@ -1,6 +1,10 @@
 import AVFoundation
+import SFBAudioEngine
 
 /// Motore audio: AVAudioPlayerNode -> TimePitch (velocità/tono) -> EQ (10 bande + bassi) -> mixer.
+///
+/// I file che iOS sa aprire da solo passano da AVAudioFile. Gli altri (estensione sbagliata, Opus, Ogg Vorbis,
+/// WavPack, ...) vengono decodificati a pezzi con SFBAudioEngine, che riconosce il formato dal contenuto.
 final class AudioEngine {
     static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
@@ -9,7 +13,14 @@ final class AudioEngine {
     private let timePitch = AVAudioUnitTimePitch()
     private let eq = AVAudioUnitEQ(numberOfBands: 11)
 
-    private(set) var file: AVAudioFile?
+    private var file: AVAudioFile?
+    private var decoder: AudioDecoder?
+    private var decoderFormat: AVAudioFormat?
+    private var converter: AVAudioConverter?
+    private var decoderEnded = false
+    private var pendingBuffers = 0
+    private let bufferFrames: AVAudioFrameCount = 32_768
+
     private var connectedFormat: AVAudioFormat?
     private var segmentStart: AVAudioFramePosition = 0
     private var pausedTime: Double = 0
@@ -17,6 +28,9 @@ final class AudioEngine {
 
     /// Chiamato sul main thread quando il brano finisce davvero di suonare.
     var onFinished: (() -> Void)?
+
+    /// true se il brano attuale passa dal decoder di riserva.
+    private(set) var usesFallbackDecoder = false
 
     init() {
         engine.attach(player)
@@ -46,9 +60,35 @@ final class AudioEngine {
         connectedFormat = format
     }
 
+    private func reconnectIfNeeded(_ format: AVAudioFormat) {
+        guard connectedFormat?.sampleRate != format.sampleRate || connectedFormat?.channelCount != format.channelCount else { return }
+        if engine.isRunning { engine.stop() }
+        engine.disconnectNodeOutput(player)
+        engine.disconnectNodeOutput(timePitch)
+        engine.disconnectNodeOutput(eq)
+        connect(format: format)
+        engine.prepare()
+    }
+
+    // MARK: Informazioni
+
+    private var sampleRate: Double {
+        if let f = file { return f.processingFormat.sampleRate }
+        if let fmt = decoderFormat { return fmt.sampleRate }
+        return 44_100
+    }
+
+    private var lengthFrames: AVAudioFramePosition {
+        if let f = file { return f.length }
+        if let d = decoder { return max(0, d.length) }
+        return 0
+    }
+
+    private var hasSource: Bool { file != nil || decoder != nil }
+
     var duration: Double {
-        guard let f = file else { return 0 }
-        return Double(f.length) / f.processingFormat.sampleRate
+        guard hasSource else { return 0 }
+        return Double(lengthFrames) / sampleRate
     }
 
     var volume: Float {
@@ -57,12 +97,13 @@ final class AudioEngine {
     }
 
     var currentTime: Double {
-        guard let f = file else { return 0 }
+        guard hasSource else { return 0 }
         guard engine.isRunning, player.isPlaying,
               let nodeTime = player.lastRenderTime,
               let playerTime = player.playerTime(forNodeTime: nodeTime) else { return pausedTime }
-        let t = Double(segmentStart) / f.processingFormat.sampleRate + Double(playerTime.sampleTime) / playerTime.sampleRate
-        return min(max(0, t), duration)
+        let t = Double(segmentStart) / sampleRate + Double(playerTime.sampleTime) / playerTime.sampleRate
+        let d = duration
+        return d > 0 ? min(max(0, t), d) : max(0, t)
     }
 
     // MARK: Caricamento e trasporto
@@ -70,17 +111,27 @@ final class AudioEngine {
     func load(url: URL) throws {
         invalidate()
         player.stop()
-        let newFile = try AVAudioFile(forReading: url)
-        let format = newFile.processingFormat
-        if connectedFormat?.sampleRate != format.sampleRate || connectedFormat?.channelCount != format.channelCount {
-            if engine.isRunning { engine.stop() }
-            engine.disconnectNodeOutput(player)
-            engine.disconnectNodeOutput(timePitch)
-            engine.disconnectNodeOutput(eq)
-            connect(format: format)
-            engine.prepare()
+        closeDecoder()
+        file = nil
+        usesFallbackDecoder = false
+
+        do {
+            let newFile = try AVAudioFile(forReading: url)
+            reconnectIfNeeded(newFile.processingFormat)
+            file = newFile
+        } catch {
+            // Estensione sbagliata o formato che iOS non apre da solo: provo con SFBAudioEngine.
+            let dec = try AudioDecoder(url: url, detectContentType: true)
+            try dec.open()
+            let source = dec.processingFormat
+            guard let standard = AVAudioFormat(standardFormatWithSampleRate: source.sampleRate,
+                                               channels: source.channelCount) else { throw error }
+            converter = source == standard ? nil : AVAudioConverter(from: source, to: standard)
+            reconnectIfNeeded(standard)
+            decoder = dec
+            decoderFormat = standard
+            usesFallbackDecoder = true
         }
-        file = newFile
         segmentStart = 0
         pausedTime = 0
     }
@@ -89,7 +140,17 @@ final class AudioEngine {
         invalidate()
         player.stop()
         file = nil
+        closeDecoder()
         pausedTime = 0
+    }
+
+    private func closeDecoder() {
+        if let d = decoder { try? d.close() }
+        decoder = nil
+        decoderFormat = nil
+        converter = nil
+        decoderEnded = false
+        pendingBuffers = 0
     }
 
     /// Posiziona il brano; se `play` è true parte subito.
@@ -104,7 +165,7 @@ final class AudioEngine {
     }
 
     func play() throws {
-        guard file != nil else { return }
+        guard hasSource else { return }
         invalidate()
         player.stop()
         if !engine.isRunning {
@@ -123,7 +184,8 @@ final class AudioEngine {
     }
 
     func seek(to time: Double, play: Bool) throws {
-        pausedTime = max(0, min(time, duration))
+        let d = duration
+        pausedTime = d > 0 ? max(0, min(time, d)) : max(0, time)
         if play {
             try self.play()
         } else {
@@ -146,27 +208,81 @@ final class AudioEngine {
 
     private func invalidate() { generation += 1 }
 
+    private func finishLater(_ gen: Int) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, gen == self.generation else { return }
+            self.onFinished?()
+        }
+    }
+
     private func schedule(from time: Double) {
-        guard let f = file else { return }
-        let sampleRate = f.processingFormat.sampleRate
         let safeTime = time.isFinite ? max(0, time) : 0
-        let start = max(0, min(AVAudioFramePosition(safeTime * sampleRate), f.length))
-        let frames = AVAudioFrameCount(max(0, f.length - start))
-        segmentStart = start
+        let start = max(0, min(AVAudioFramePosition(safeTime * sampleRate), lengthFrames))
         invalidate()
         let gen = generation
-        guard frames > 0 else {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, gen == self.generation else { return }
-                self.onFinished?()
+
+        if let f = file {
+            let frames = AVAudioFrameCount(max(0, f.length - start))
+            segmentStart = start
+            guard frames > 0 else { finishLater(gen); return }
+            player.scheduleSegment(f, startingFrame: start, frameCount: frames, at: nil,
+                                   completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, gen == self.generation else { return }
+                    self.onFinished?()
+                }
             }
             return
         }
-        player.scheduleSegment(f, startingFrame: start, frameCount: frames, at: nil,
-                               completionCallbackType: .dataPlayedBack) { [weak self] _ in
+
+        guard let dec = decoder else { return }
+        if dec.supportsSeeking {
+            try? dec.seek(to: start)
+        }
+        segmentStart = max(0, dec.position)
+        decoderEnded = false
+        pendingBuffers = 0
+        for _ in 0..<4 { scheduleNextDecodedBuffer(gen) }
+        if pendingBuffers == 0 { finishLater(gen) }
+    }
+
+    /// Decodifica e accoda il prossimo pezzo; quando un pezzo finisce ne accoda un altro.
+    private func scheduleNextDecodedBuffer(_ gen: Int) {
+        guard gen == generation, !decoderEnded, let dec = decoder, let outFormat = decoderFormat,
+              let raw = AVAudioPCMBuffer(pcmFormat: dec.processingFormat, frameCapacity: bufferFrames) else { return }
+        do {
+            try dec.decode(into: raw, length: bufferFrames)
+        } catch {
+            decoderEnded = true
+            return
+        }
+        guard raw.frameLength > 0 else {
+            decoderEnded = true
+            return
+        }
+        var buffer = raw
+        if let converter {
+            guard let converted = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: raw.frameLength) else {
+                decoderEnded = true
+                return
+            }
+            do {
+                try converter.convert(to: converted, from: raw)
+            } catch {
+                decoderEnded = true
+                return
+            }
+            buffer = converted
+        }
+        pendingBuffers += 1
+        player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 guard let self, gen == self.generation else { return }
-                self.onFinished?()
+                self.pendingBuffers -= 1
+                self.scheduleNextDecodedBuffer(gen)
+                if self.decoderEnded && self.pendingBuffers == 0 {
+                    self.onFinished?()
+                }
             }
         }
     }
