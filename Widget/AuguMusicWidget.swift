@@ -54,22 +54,26 @@ struct NowPlayingWidgetView: View {
 
     // MARK: Parti comuni
 
+    /// Copertina sempre quadrata, ad angoli vivi.
     private var artwork: some View {
-        Group {
-            if let image = entry.artwork {
-                Image(uiImage: image)
-                    .resizable()
-                    .fullColorInTintedMode()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    Color.white.opacity(0.12)
-                    Image(systemName: "music.note").font(.title2).foregroundStyle(.white.opacity(0.7))
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let image = entry.artwork {
+                    Image(uiImage: image)
+                        .resizable()
+                        .fullColorInTintedMode()
+                        .scaledToFill()
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                        .clipped()
+                } else {
+                    ZStack {
+                        Color.white.opacity(0.12)
+                        Image(systemName: "music.note").font(.title2).foregroundStyle(.white.opacity(0.7))
+                    }
                 }
             }
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .clipShape(Rectangle())
+            .clipped()
     }
 
     private func titles(_ snap: WidgetSnapshot, big: Bool) -> some View {
