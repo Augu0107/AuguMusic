@@ -114,7 +114,7 @@ struct AlbumGridView: View {
                 LibraryEmptyView()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 14) {
+                    LazyVGrid(columns: columns, alignment: .center, spacing: 14) {
                         ForEach(albums) { album in
                             NavigationLink(value: Route.group(.album, album.id)) {
                                 AlbumCard(album: album)
@@ -144,16 +144,19 @@ struct AlbumCard: View {
     @EnvironmentObject private var library: LibraryStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 4, mode: .fill)
+        VStack(alignment: .leading, spacing: 0) {
+            ArtworkView(track: library.byID[album.trackIDs.first ?? ""], maxPixel: 460, cornerRadius: 0, mode: .fill)
             Text(album.name)
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(2, reservesSpace: true)
+                .lineLimit(2)
                 .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
         }
-        .padding(8)
-        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
+        .background(Color(uiColor: .systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
     }
 }
 

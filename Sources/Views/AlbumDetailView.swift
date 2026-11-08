@@ -62,7 +62,7 @@ struct AlbumDetailView: View {
                 Text(album.name)
                     .font(.largeTitle.bold())
                     .lineLimit(3)
-                Text("\(shown.count)/\(all.count) brani")
+                Text("\(shown.count)/\(all.count) brani · \(formatTime(shown.reduce(0) { $0 + $1.duration }))")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
 
@@ -97,6 +97,7 @@ struct AlbumDetailView: View {
                 TrackListRow(track: track,
                              isCurrent: player.loadedTrackID == track.id,
                              showArtwork: true,
+                             showAlbum: false,
                              sourceName: album.name) {
                     player.play(shown, startAt: index, source: album.name)
                 }
@@ -162,21 +163,25 @@ struct AlbumDetailView: View {
         let dimmed = selectedName != nil && !selected
         let lightGray = Color(uiColor: .systemGray3)
         return Button(action: action) {
-            VStack(spacing: 2) {
-                Text(name)
-                    .font(.footnote.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.8)
-                    .padding(8)
-                    .frame(width: 96, height: 96)
-                    .foregroundStyle(dimmed ? lightGray : Color.primary)
-                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
-                Rectangle()
-                    .fill(dimmed ? lightGray : Color.accentColor)
-                    .frame(width: 96, height: 3)
-            }
+            Text(name)
+                .font(.footnote.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
+                .padding(8)
+                .padding(.bottom, 4)
+                .frame(width: 96, height: 96)
+                .foregroundStyle(dimmed ? lightGray : Color.primary)
+                .overlay(alignment: .bottom) {
+                    // Lineetta dentro il riquadro, in basso, centrata e staccata dai lati
+                    Rectangle()
+                        .fill(dimmed ? lightGray : Color.accentColor)
+                        .frame(height: 3)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                }
+                .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color(uiColor: .systemGray4), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

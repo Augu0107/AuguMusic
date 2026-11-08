@@ -75,8 +75,12 @@ struct RootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                content
+                    .id(tab)
+                    .transition(.opacity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             SelectionBar()
             bottomBar
         }
@@ -217,7 +221,8 @@ struct RootView: View {
                     if t == tab {
                         paths[t] = NavigationPath() // secondo tocco: torna all'inizio della scheda
                     } else {
-                        tabRaw = t.rawValue
+                        // Dissolvenza tra le schede (il colore della riproduzione sfuma invece di sparire)
+                        withAnimation(.easeInOut(duration: 0.35)) { tabRaw = t.rawValue }
                     }
                 } label: {
                     tabCell(t.glyph, selected: t == tab)
@@ -262,11 +267,10 @@ struct RootView: View {
                 .frame(height: 3)
             Spacer(minLength: 0)
             AppIconView(glyph: glyph, size: 22)
-                .foregroundStyle(selected ? Color.primary : Color(uiColor: .systemGray2))
+                .foregroundStyle(selected ? Color.primary.opacity(0.75) : Color(uiColor: .systemGray3))
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(selected ? Color(uiColor: .systemGray4).opacity(0.7) : Color.clear)
         .contentShape(Rectangle())
     }
 

@@ -38,14 +38,21 @@ struct NowPlayingView: View {
                 VStack(spacing: 0) {
                     topBar
                     if wide {
-                        HStack(alignment: .top, spacing: 28) {
-                            playerPanel(wide: true)
-                                .frame(maxWidth: min(geo.size.width * 0.44, 520))
-                            sidePanelView
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        // Tablet in orizzontale: copertina (o testo) a sinistra, tasti di riproduzione a destra.
+                        HStack(alignment: .center, spacing: 36) {
+                            artworkArea(wide: true)
+                                .frame(maxWidth: geo.size.width * 0.48, maxHeight: .infinity)
+                            VStack(spacing: 22) {
+                                Spacer(minLength: 0)
+                                titleBlock
+                                SeekBar()
+                                transportControls
+                                secondaryControls(wide: true)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: 520)
                         }
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 36)
                         .padding(.bottom, 20)
                     } else {
                         playerPanel(wide: false)
@@ -164,28 +171,33 @@ struct NowPlayingView: View {
     private func playerPanel(wide: Bool) -> some View {
         VStack(spacing: 18) {
             Spacer(minLength: 4)
-            Group {
-                if !wide && showLyricsInline {
-                    LyricsView(lyrics: lyrics)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(1, contentMode: .fit)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                } else {
-                    ArtworkView(track: player.currentTrack, maxPixel: 1000, cornerRadius: 16, mode: .natural)
-                        .shadow(color: .black.opacity(0.3), radius: 18, y: 8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .onTapGesture {
-                if !wide { withAnimation(.easeInOut(duration: 0.25)) { showLyricsInline.toggle() } }
-            }
-            .layoutPriority(1)
+            artworkArea(wide: wide)
+                .layoutPriority(1)
 
             titleBlock
             SeekBar()
             transportControls
             secondaryControls(wide: wide)
             Spacer(minLength: 4)
+        }
+    }
+
+    /// Copertina, oppure il testo quando è attivo (tocca per passare dall'uno all'altro).
+    private func artworkArea(wide: Bool) -> some View {
+        Group {
+            if showLyricsInline {
+                LyricsView(lyrics: lyrics)
+                    .frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil)
+                    .aspectRatio(wide ? nil : 1, contentMode: .fit)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                ArtworkView(track: player.currentTrack, maxPixel: 1000, cornerRadius: 16, mode: .natural)
+                    .shadow(color: .black.opacity(0.3), radius: 18, y: 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.25)) { showLyricsInline.toggle() }
         }
     }
 
@@ -260,19 +272,15 @@ struct NowPlayingView: View {
 
     private func secondaryControls(wide: Bool) -> some View {
         HStack(spacing: 0) {
-            if !wide {
-                controlButton(icon: showLyricsInline ? "quote.bubble.fill" : "quote.bubble", label: "Testo",
-                              active: showLyricsInline) {
-                    withAnimation { showLyricsInline.toggle() }
-                }
+            controlButton(icon: showLyricsInline ? "quote.bubble.fill" : "quote.bubble", label: "Testo",
+                          active: showLyricsInline) {
+                withAnimation { showLyricsInline.toggle() }
             }
             controlButton(icon: "slider.vertical.3", label: "EQ", active: settings.eqEnabled) { sheet = .equalizer }
             controlButton(icon: "moon.zzz", label: sleepLabel, active: player.sleepTimer != nil) { sheet = .sleepTimer }
             controlButton(icon: "speedometer", label: settings.speed.formatted(.number.precision(.fractionLength(0...2))) + "x",
                           active: settings.speed != 1 || settings.pitch != 0) { sheet = .playback }
-            if !wide {
-                controlButton(icon: "bookmark", label: "Segnalibri") { sheet = .bookmarks }
-            }
+            controlButton(icon: "bookmark", label: "Segnalibri") { sheet = .bookmarks }
             if player.abRepeat.a != nil {
                 controlButton(icon: "repeat", label: player.abRepeat.isActive ? "A-B" : "A…", active: true) { player.clearAB() }
             }

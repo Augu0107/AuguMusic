@@ -83,6 +83,7 @@ struct TrackRow: View {
     var showArtwork = true
     var leadingNumber: Int? = nil
     var selected = false
+    var showAlbum = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -111,7 +112,7 @@ struct TrackRow: View {
                     .font(.body.weight(isCurrent ? .semibold : .regular))
                     .foregroundStyle(isCurrent ? Color.accentColor : Color.primary)
                     .lineLimit(1)
-                Text("\(track.displayArtist) · \(track.displayAlbum)")
+                Text(showAlbum ? "\(track.displayArtist) · \(track.displayAlbum)" : track.displayArtist)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -131,6 +132,7 @@ struct TrackListRow: View {
     var isCurrent = false
     var showArtwork = true
     var leadingNumber: Int? = nil
+    var showAlbum = true
     var sourceName: String = "Coda"
     let onTap: () -> Void
 
@@ -144,7 +146,8 @@ struct TrackListRow: View {
                     .font(.title3)
                     .foregroundStyle(selected ? Color.accentColor : Color.secondary)
             }
-            TrackRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: leadingNumber, selected: selected)
+            TrackRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: leadingNumber,
+                     selected: selected, showAlbum: showAlbum)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if ui.isSelecting { ui.toggleSelection(track.id) } else { onTap() }
