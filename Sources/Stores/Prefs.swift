@@ -96,6 +96,14 @@ enum Prefs {
     static let hideExtraNowPlaying = "lib.hideExtraNowPlaying"
     static let hideExtraAll = "lib.hideExtraAll"
 
+    // Auricolare, Bluetooth e altoparlanti
+    static let pauseOnDisconnect = "hp.pauseOnDisconnect"
+    static let resumeOnlyAfterDisconnect = "hp.resumeOnlyAfterDisconnect"
+    static let resumeBluetooth = "hp.resumeBluetooth"
+    static let resumeWired = "hp.resumeWired"
+    static let preventAutoplay = "hp.preventAutoplay"
+    static let strictAutoplay = "hp.strictAutoplay"
+
     static let defaultSeparators = ", ; / | & ft. feat."
 
     static let defaults: [String: Any] = [
@@ -169,6 +177,12 @@ enum Prefs {
         lyricsSource: "embedded",
         hideExtraNowPlaying: false,
         hideExtraAll: false,
+        pauseOnDisconnect: true,
+        resumeOnlyAfterDisconnect: false,
+        resumeBluetooth: false,
+        resumeWired: false,
+        preventAutoplay: true,
+        strictAutoplay: true,
     ]
 
     static func register() {

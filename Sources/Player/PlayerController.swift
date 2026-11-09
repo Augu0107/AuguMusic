@@ -39,6 +39,9 @@ final class PlayerController: ObservableObject {
     private var sessionConfigured = false
     private var configuredFocus = -1
     private var pausedByMute = false
+    private var pausedByDisconnect = false
+    private var lastRouteChange = Date.distantPast
+    private var pausedAt = Date()
     private var volumeObservation: NSKeyValueObservation?
     private var lastVolume: Float = 1
     private var analyzingRG = Set<String>()
@@ -283,6 +286,7 @@ final class PlayerController: ObservableObject {
     func pause() {
         guard isPlaying else { return }
         isPlaying = false
+        pausedAt = Date()
         if settings.fadeOutMs > 0 {
             fade(to: 0, thenPause: true, ms: settings.fadeOutMs)
         } else {
@@ -818,14 +822,45 @@ final class PlayerController: ObservableObject {
         guard let raw = n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
               let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else { return }
         settings.switchEQDevice(to: Self.currentOutputName())
-        if reason == .oldDeviceUnavailable && isPlaying {
+        lastRouteChange = Date()
+        switch reason {
+        case .oldDeviceUnavailable:
+            // "Interrompi quando disconnetti" (cuffie, altoparlante o Bluetooth staccati).
+            guard isPlaying, Prefs.bool(Prefs.pauseOnDisconnect) else { return }
             isPlaying = false
+            pausedAt = Date()
+            pausedByDisconnect = true
             audio.pause()
             clock.time = audio.currentTime
             saveElapsed()
             updateNowPlaying()
             persist()
+        case .newDeviceAvailable:
+            // "Riprendi quando ti connetti".
+            guard !isPlaying, loadedTrackID != nil || activeQueue != nil else { return }
+            let port = AVAudioSession.sharedInstance().currentRoute.outputs.first?.portType
+            let isBluetooth = port == .bluetoothA2DP || port == .bluetoothLE || port == .bluetoothHFP
+            let isWired = port == .headphones || port == .usbAudio || port == .lineOut
+            let wanted = (isBluetooth && Prefs.bool(Prefs.resumeBluetooth)) || (isWired && Prefs.bool(Prefs.resumeWired))
+            guard wanted, !Prefs.bool(Prefs.resumeOnlyAfterDisconnect) || pausedByDisconnect else { return }
+            pausedByDisconnect = false
+            play()
+        default:
+            break
         }
+    }
+
+    /// "Prevenire la riproduzione automatica indesiderata": alcune auto/cuffie mandano "play" da sole
+    /// appena si collegano o si scollegano. Quei comandi vengono ignorati.
+    private func shouldIgnoreRemotePlay() -> Bool {
+        guard !isPlaying, Prefs.bool(Prefs.preventAutoplay) else { return false }
+        if Date().timeIntervalSince(lastRouteChange) < 4 { return true }
+        // Restrizioni più severe: in background e in pausa da più di 5 minuti, "play" dall'esterno viene ignorato.
+        if Prefs.bool(Prefs.strictAutoplay), UIApplication.shared.applicationState == .background,
+           Date().timeIntervalSince(pausedAt) > 300 {
+            return true
+        }
+        return false
     }
 
     private func handleConfigurationChange() {
@@ -841,7 +876,11 @@ final class PlayerController: ObservableObject {
     private func setupRemoteCommands() {
         let c = MPRemoteCommandCenter.shared()
         _ = c.playCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.play() }
+            MainActor.assumeIsolated {
+                guard let self, !self.shouldIgnoreRemotePlay() else { return }
+                self.pausedByDisconnect = false
+                self.play()
+            }
             return .success
         }
         _ = c.pauseCommand.addTarget { [weak self] _ in
@@ -849,7 +888,11 @@ final class PlayerController: ObservableObject {
             return .success
         }
         _ = c.togglePlayPauseCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.togglePlayPause() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if !self.isPlaying && self.shouldIgnoreRemotePlay() { return }
+                self.togglePlayPause()
+            }
             return .success
         }
         _ = c.nextTrackCommand.addTarget { [weak self] _ in

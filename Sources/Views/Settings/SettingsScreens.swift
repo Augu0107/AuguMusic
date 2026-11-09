@@ -14,6 +14,8 @@ struct SettingsScreen: View {
                     case .interface: InterfaceSettingsPage()
                     case .audio: AudioSettingsPage()
                     case .library: LibrarySettingsPage()
+                    case .headset: HeadsetSettingsPage()
+                    case .preventAutoplay: PreventAutoplayPage()
                     case .scanFolders: ScanFoldersPage()
                     case .excludedFolders: ExcludedFoldersPage()
                     case .libraryAdvanced: LibraryAdvancedPage()
@@ -53,6 +55,7 @@ struct SettingsRootPage: View {
                     SettingsRow(title: "Interfaccia", systemIcon: "paintpalette.fill") { nav.path = [.interface] }
                     SettingsRow(title: "Audio", systemIcon: "speaker.wave.2.fill") { nav.path = [.audio] }
                     SettingsRow(title: "Libreria brani e tag", systemIcon: "music.note.list") { nav.path = [.library] }
+                    SettingsRow(title: "Auricolare, Bluetooth e altoparlanti", systemIcon: "headphones") { nav.path = [.headset] }
                 }
                 .listRowInsets(EdgeInsets())
 
@@ -883,6 +886,15 @@ struct SettingsEntry: Identifiable {
             e("Sorgente preferita per i testi", .library),
             e("Nascondi contenuti extra dai tag", .library, .hideExtra),
             e("Tipi di file supportati", .library),
+            e("Auricolare, Bluetooth e altoparlanti", .headset),
+            e("Interrompi quando disconnetti", .headset),
+            e("Riprendi solo se messo in pausa dalla disconnessione prima", .headset),
+            e("Riprendi quando il bluetooth si collega", .headset),
+            e("Riprendi quando si collegano cuffie/altoparlanti cablati", .headset),
+            e("Prevenire la riproduzione automatica indesiderata", .headset, .preventAutoplay),
+            e("Restrizioni più severe", .headset, .preventAutoplay),
+            e("Azione a doppia pressione del pulsante dell'auricolare", .headset),
+            e("Azione a tripla pressione del pulsante dell'auricolare", .headset),
             e("Dispositivi di memoria", .library),
             e("Widget Home"),
             e("Toccando un brano"),
