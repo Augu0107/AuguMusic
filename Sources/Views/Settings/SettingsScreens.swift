@@ -17,6 +17,7 @@ struct SettingsScreen: View {
                     case .headset: HeadsetSettingsPage()
                     case .widget: WidgetSettingsPage()
                     case .advanced: AdvancedSettingsPage()
+                    case .backup: BackupSettingsPage()
                     case .csvExport: CSVExportPage()
                     case .advancedShuffle: AdvancedShufflePage()
                     case .ignoreWords: IgnoreWordsPage()
@@ -63,11 +64,9 @@ struct SettingsRootPage: View {
                     SettingsRow(title: "Auricolare, Bluetooth e altoparlanti", systemIcon: "headphones") { nav.path = [.headset] }
                     SettingsRow(title: "Widget HomeScreen", systemIcon: "square.grid.2x2.fill") { nav.path = [.widget] }
                     SettingsRow(title: "Avanzati", systemIcon: "gearshape.2.fill") { nav.path = [.advanced] }
+                    SettingsRow(title: "Backup/Ripristino", systemIcon: "externaldrive.fill.badge.timemachine") { nav.path = [.backup] }
                 }
                 .listRowInsets(EdgeInsets())
-
-                // Opzioni che verranno spostate nelle loro categorie (Audio, Libreria, ...) più avanti.
-                OtherSettingsSections(showImporter: $showImporter)
             }
             .listStyle(.insetGrouped)
         }
@@ -925,14 +924,16 @@ struct SettingsEntry: Identifiable {
             e("Shuffle avanzato", .advanced, .advancedShuffle),
             e("Ignora alcune parole all'inizio durante l'ordinamento", .advanced, .ignoreWords),
             e("Ordinamento alfanumerico", .advanced),
+            e("Backup/Ripristino", .backup),
+            e("Esegui il backup ora", .backup),
+            e("Backup automatico", .backup),
+            e("Ripristina ora", .backup),
             e("Tema del widget", .widget),
             e("Copertina Album", .widget),
             e("Aggiungi alle playlist", .widget),
             e("Aggiungi/rimuovi dai preferiti", .widget),
             e("Pulsanti Avanti-veloce e Riavvolgi", .widget),
             e("Dispositivi di memoria", .library),
-            e("Toccando un brano"),
-            e("Numero massimo di code"),
         ]
     }()
 }

@@ -30,6 +30,7 @@ struct NowPlayingView: View {
     @State private var sheet: NowPlayingSheet?
     @State private var artistChoices: [String] = []
     @State private var showFullArtwork = false
+    @State private var showEqualizer = false
     @State private var pendingSearch: (query: String, images: Bool)?
 
     @AppStorage(Prefs.npSwipe) private var swipeTracks = true
@@ -108,6 +109,7 @@ struct NowPlayingView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showEqualizer) { EqualizerView() }
         .fullScreenCover(isPresented: $showFullArtwork) {
             FullArtworkView(image: player.nowPlayingImage) { showFullArtwork = false }
         }
@@ -461,7 +463,7 @@ struct NowPlayingView: View {
                               active: userData.isFavorite(t.id)) { userData.toggleFavorite(t.id) }
             }
         case "equalizer":
-            controlButton(icon: "slider.vertical.3", label: "EQ", active: settings.eqEnabled) { sheet = .equalizer }
+            controlButton(icon: "slider.vertical.3", label: "EQ", active: settings.eqEnabled) { showEqualizer = true }
         case "sleepTimer":
             controlButton(icon: "moon.zzz", label: sleepLabel, active: player.sleepTimer != nil) { sheet = .sleepTimer }
         case "speed":

@@ -77,6 +77,8 @@ struct RootView: View {
     @State private var tabRaw = ""
     @State private var paths: [MainTab: NavigationPath] = [:]
     @State private var moreSheet: MoreSheet?
+    @State private var showEqualizer = false
+    @State private var showHelp = false
     @State private var confirmQuit = false
     @State private var tabChanges = 0
     @AppStorage(Prefs.tabOrder) private var tabOrder = ""
@@ -127,9 +129,11 @@ struct RootView: View {
         .sheet(item: $ui.tagEditor) { list in
             TagEditorView(trackIDs: list.ids)
         }
+        .fullScreenCover(isPresented: $showEqualizer) { EqualizerView() }
+        .fullScreenCover(isPresented: $showHelp) { HelpInfoView() }
         .sheet(item: $moreSheet) { which in
             switch which {
-            case .equalizer: EqualizerView()
+            case .equalizer: EmptyView()
             case .sleepTimer: SleepTimerView()
             case .settings: EmptyView()
             }
@@ -191,6 +195,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.persist() }
+            if phase == .background { BackupManager.autoBackupIfNeeded() }
             if phase == .active, settings.theme == .timeBased { settings.objectWillChange.send() }
             if phase == .active { Task { await library.autoScanIfEnabled() } }
         }
@@ -296,7 +301,7 @@ struct RootView: View {
             }
             Menu {
                 if menuMain.csvContains("equalizer") {
-                    Button { moreSheet = .equalizer } label: { Label("Equalizzatore", systemImage: "slider.vertical.3") }
+                    Button { showEqualizer = true } label: { Label("Equalizzatore", systemImage: "slider.vertical.3") }
                 }
                 if menuMain.csvContains("sleepTimer") {
                     Button { moreSheet = .sleepTimer } label: { Label("Timer di spegnimento", systemImage: "moon.zzz") }
@@ -308,6 +313,7 @@ struct RootView: View {
                     } label: { Label("Scansione", systemImage: "arrow.clockwise") }
                 }
                 Button { ui.showSettings = true } label: { Label("Impostazioni", systemImage: "gearshape") }
+                Button { showHelp = true } label: { Label("Aiuto ed info", systemImage: "info.circle.fill") }
                 if menuMain.csvContains("quit") {
                     Divider()
                     Button(role: .destructive) {

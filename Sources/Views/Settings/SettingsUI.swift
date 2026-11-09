@@ -8,7 +8,7 @@ enum SettingsDest: Hashable {
     case audio, eqSettings, replayGain, replayGainCalc
     case library, scanFolders, excludedFolders, libraryAdvanced, hideExtra
     case headset, preventAutoplay, widget
-    case advanced, csvExport, advancedShuffle, ignoreWords
+    case advanced, csvExport, advancedShuffle, ignoreWords, backup
     case menuQueue, menuNowPlaying, menuFolders, menuAlbums, menuArtists, menuGenres, menuPlaylists
 
     var title: String {
@@ -19,6 +19,7 @@ enum SettingsDest: Hashable {
         case .headset: "Auricolare, Bluetooth e altoparlanti"
         case .widget: "Widget HomeScreen"
         case .advanced: "Avanzati"
+        case .backup: "Backup/Ripristino"
         case .csvExport: "Esporta CSV"
         case .advancedShuffle: "Shuffle avanzato"
         case .ignoreWords: "Ignora alcune parole all'inizio"

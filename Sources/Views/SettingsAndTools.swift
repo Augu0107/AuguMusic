@@ -184,35 +184,6 @@ struct TrackInfoView: View {
     }
 }
 
-// MARK: - Impostazioni (opzioni non ancora divise in categorie)
-
-/// Sezioni che restano sotto "Lingua" e "Interfaccia" finché non creiamo le loro categorie.
-struct OtherSettingsSections: View {
-    @Binding var showImporter: Bool
-    @EnvironmentObject private var settings: AppSettings
-    @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var progress: ScanProgress
-    @AppStorage(Prefs.excludedFolders) private var excluded = ""
-
-    var body: some View {
-        Section {
-            Picker("Toccando un brano", selection: $settings.tapAction) {
-                ForEach(TapAction.allCases) { Text($0.label).tag($0) }
-            }
-            Stepper("Numero massimo di code: \(settings.maxQueues)", value: $settings.maxQueues, in: 2...50)
-        } header: {
-            Text("Code")
-        }
-
-        Section("Informazioni") {
-            LabeledContent("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
-            Text("AuguMusic è un'app personale di Chiara, ispirata a Musicolet. Funziona solo con file locali: niente account, niente pubblicità, niente internet.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 /// Cartelle escluse dalla scansione, salvate una per riga (percorso relativo, es. "AuguMusic/Podcast").
 enum ExcludedFolders {
     static func list(_ stored: String) -> [String] {

@@ -132,6 +132,8 @@ enum Prefs {
     static let lastCSVMonth = "adv.lastCSVMonth"
     static let lastCSVYear = "adv.lastCSVYear"
 
+    static let autoBackup = "backup.auto"
+
     static let defaultSeparators = ", ; / | & ft. feat."
 
     static let defaults: [String: Any] = [
@@ -212,6 +214,7 @@ enum Prefs {
         preventAutoplay: true,
         strictAutoplay: true,
         showFileName: false,
+        autoBackup: true,
         nextPrevAsSeek: false,
         rememberPosition: false,
         playCountPercent: 30,
