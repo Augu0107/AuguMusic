@@ -196,21 +196,6 @@ struct OtherSettingsSections: View {
 
     var body: some View {
         Section {
-            Picker("Colore del widget", selection: $settings.widgetStyle) {
-                ForEach(WidgetStyle.allCases) { Text($0.label).tag($0) }
-            }
-            if !WidgetBridge.shared.isAvailable {
-                Text("Il widget non riesce a ricevere i dati: l'App Group non è attivo. Prova a reinstallare l'app con AltStore.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
-        } header: {
-            Text("Widget Home")
-        } footer: {
-            Text("Tieni premuto sulla Home dell'iPad → Modifica → Aggiungi widget → AuguMusic.")
-        }
-
-        Section {
             Picker("Toccando un brano", selection: $settings.tapAction) {
                 ForEach(TapAction.allCases) { Text($0.label).tag($0) }
             }

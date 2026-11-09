@@ -23,8 +23,10 @@ final class WidgetBridge {
         var queueName: String
         var position: String
         var upNext: [String]
+        var queue: [WidgetQueueItem]
         var style: WidgetStyle
         var accent: UIColor
+        var options: [String: Bool]
     }
 
     func update(_ state: State) {
@@ -69,7 +71,10 @@ final class WidgetBridge {
                                   upNext: state.upNext,
                                   background: lastColors.bg,
                                   accent: lastColors.accent,
-                                  updated: Date())
+                                  updated: Date(),
+                                  theme: state.style.rawValue,
+                                  options: state.options,
+                                  queue: state.queue)
         var comparable = snap
         comparable.updated = .distantPast
         let json = try? JSONEncoder().encode(comparable)
@@ -105,13 +110,9 @@ final class WidgetBridge {
 
     static func colors(style: WidgetStyle, artwork: UIImage?, accent: UIColor) -> (bg: [Double], accent: [Double]) {
         switch style {
-        case .dark:
+        case .light, .dark, .system:
+            // Il widget sceglie lui chiaro/scuro; qui serve solo il colore dei pulsanti e del titolo.
             return ([0.11, 0.11, 0.13], components(accent))
-        case .accent:
-            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
-            accent.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-            let bg = UIColor(hue: h, saturation: min(s, 0.75), brightness: 0.34, alpha: 1)
-            return (components(bg), components(UIColor(hue: h, saturation: min(s, 0.55), brightness: 1, alpha: 1)))
         case .artwork:
             guard let artwork, let dominant = dominantColor(artwork) else {
                 return ([0.16, 0.16, 0.18], components(accent))

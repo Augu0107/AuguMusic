@@ -7,7 +7,7 @@ enum SettingsDest: Hashable {
     case interface, theme, optionsMenus
     case audio, eqSettings, replayGain, replayGainCalc
     case library, scanFolders, excludedFolders, libraryAdvanced, hideExtra
-    case headset, preventAutoplay
+    case headset, preventAutoplay, widget
     case menuQueue, menuNowPlaying, menuFolders, menuAlbums, menuArtists, menuGenres, menuPlaylists
 
     var title: String {
@@ -16,6 +16,7 @@ enum SettingsDest: Hashable {
         case .audio: "Audio"
         case .library: "Libreria brani e tag"
         case .headset: "Auricolare, Bluetooth e altoparlanti"
+        case .widget: "Widget HomeScreen"
         case .preventAutoplay: "Prevenire la riproduzione automatica indesiderata"
         case .scanFolders: "Cartelle da analizzare"
         case .excludedFolders: "Cartelle escluse"

@@ -960,8 +960,16 @@ final class PlayerController: ObservableObject {
 
     func refreshWidget() {
         var upNext: [String] = []
+        var queueItems: [WidgetQueueItem] = []
         var position = ""
         if let q = activeQueue {
+            let from = max(0, q.index - 1)
+            for i in from..<min(q.items.count, from + 9) {
+                guard let t = library.byID[q.items[i]] else { continue }
+                let c = TagCleaner.forNowPlaying(t)
+                queueItems.append(WidgetQueueItem(number: i + 1, title: c.displayTitle, artist: c.displayArtist,
+                                                  duration: formatTime(t.duration), isCurrent: i == q.index))
+            }
             position = q.items.isEmpty ? "" : "\(q.index + 1)/\(q.items.count)"
             let start = q.index + 1
             if start < q.items.count {
@@ -977,8 +985,10 @@ final class PlayerController: ObservableObject {
                                        queueName: activeQueue?.name ?? "",
                                        position: position,
                                        upNext: upNext,
+                                       queue: queueItems,
                                        style: settings.widgetStyle,
-                                       accent: UIColor(settings.accent.color))
+                                       accent: UIColor(settings.accent.color),
+                                       options: WidgetSettings.options())
         WidgetBridge.shared.update(state)
     }
 

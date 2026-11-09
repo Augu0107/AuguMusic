@@ -164,6 +164,10 @@ struct RootView: View {
         }
         .onOpenURL { url in
             if url.host == "nowplaying" { select(.nowPlaying) }
+            if url.host == "addtoplaylist", let id = player.loadedTrackID {
+                select(.nowPlaying)
+                ui.addToPlaylist = TrackIDList(ids: [id])
+            }
         }
         .onChange(of: ui.showNowPlaying) { _, show in
             guard show else { return }

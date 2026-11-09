@@ -15,6 +15,7 @@ struct SettingsScreen: View {
                     case .audio: AudioSettingsPage()
                     case .library: LibrarySettingsPage()
                     case .headset: HeadsetSettingsPage()
+                    case .widget: WidgetSettingsPage()
                     case .preventAutoplay: PreventAutoplayPage()
                     case .scanFolders: ScanFoldersPage()
                     case .excludedFolders: ExcludedFoldersPage()
@@ -56,6 +57,7 @@ struct SettingsRootPage: View {
                     SettingsRow(title: "Audio", systemIcon: "speaker.wave.2.fill") { nav.path = [.audio] }
                     SettingsRow(title: "Libreria brani e tag", systemIcon: "music.note.list") { nav.path = [.library] }
                     SettingsRow(title: "Auricolare, Bluetooth e altoparlanti", systemIcon: "headphones") { nav.path = [.headset] }
+                    SettingsRow(title: "Widget HomeScreen", systemIcon: "square.grid.2x2.fill") { nav.path = [.widget] }
                 }
                 .listRowInsets(EdgeInsets())
 
@@ -895,8 +897,13 @@ struct SettingsEntry: Identifiable {
             e("Restrizioni più severe", .headset, .preventAutoplay),
             e("Azione a doppia pressione del pulsante dell'auricolare", .headset),
             e("Azione a tripla pressione del pulsante dell'auricolare", .headset),
+            e("Widget HomeScreen", .widget),
+            e("Tema del widget", .widget),
+            e("Copertina Album", .widget),
+            e("Aggiungi alle playlist", .widget),
+            e("Aggiungi/rimuovi dai preferiti", .widget),
+            e("Pulsanti Avanti-veloce e Riavvolgi", .widget),
             e("Dispositivi di memoria", .library),
-            e("Widget Home"),
             e("Toccando un brano"),
             e("Numero massimo di code"),
         ]

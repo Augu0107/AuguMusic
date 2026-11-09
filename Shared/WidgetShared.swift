@@ -32,6 +32,33 @@ enum AppGroup {
 
 // MARK: - Stato mostrato dal widget
 
+struct WidgetQueueItem: Codable, Hashable {
+    var number: Int
+    var title: String
+    var artist: String
+    var duration: String
+    var isCurrent: Bool
+}
+
+/// Opzioni dei tre widget (Semplice, Avanzati, Coda corrente), scelte nelle Impostazioni dell'app.
+enum WidgetOption {
+    static let simpleArt = "simple.art"
+    static let advancedArt = "advanced.art"
+    static let advancedPlaylist = "advanced.playlist"
+    static let advancedFavorite = "advanced.favorite"
+    static let advancedSeek = "advanced.seek"
+    static let queueArt = "queue.art"
+    static let queuePlaylist = "queue.playlist"
+    static let queueFavorite = "queue.favorite"
+    static let queueSeek = "queue.seek"
+
+    static let defaults: [String: Bool] = [
+        simpleArt: true,
+        advancedArt: true, advancedPlaylist: false, advancedFavorite: false, advancedSeek: false,
+        queueArt: true, queuePlaylist: true, queueFavorite: true, queueSeek: false,
+    ]
+}
+
 struct WidgetSnapshot: Codable {
     var trackID: String?
     var title: String
@@ -45,11 +72,21 @@ struct WidgetSnapshot: Codable {
     var background: [Double]
     var accent: [Double]
     var updated: Date
+    /// "light", "dark", "system", "artwork"
+    var theme: String? = nil
+    var options: [String: Bool]? = nil
+    var queue: [WidgetQueueItem]? = nil
+
+    func option(_ key: String) -> Bool { options?[key] ?? WidgetOption.defaults[key] ?? false }
 
     static let placeholder = WidgetSnapshot(trackID: nil, title: "Titolo del brano", artist: "Artista", album: "Album",
                                             queueName: "Coda", position: "1/12", isPlaying: false, isFavorite: false,
                                             upNext: ["Brano successivo", "Un altro brano", "E un altro ancora"],
-                                            background: [0.32, 0.18, 0.12], accent: [1.0, 0.62, 0.3], updated: Date())
+                                            background: [0.32, 0.18, 0.12], accent: [1.0, 0.62, 0.3], updated: Date(),
+                                            theme: "artwork", options: nil,
+                                            queue: [WidgetQueueItem(number: 1, title: "Titolo", artist: "Artista", duration: "3:12", isCurrent: true),
+                                                    WidgetQueueItem(number: 2, title: "Brano successivo", artist: "Artista", duration: "4:05", isCurrent: false),
+                                                    WidgetQueueItem(number: 3, title: "Un altro brano", artist: "Artista", duration: "2:58", isCurrent: false)])
 
     private static let fileName = "widget.json"
     private static let artworkName = "widget-artwork.jpg"

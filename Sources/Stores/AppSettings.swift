@@ -106,13 +106,14 @@ struct EQProfile: Codable {
 }
 
 enum WidgetStyle: String, CaseIterable, Identifiable {
-    case artwork, accent, dark
+    case light, dark, system, artwork
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .artwork: "Dalla copertina"
-        case .accent: "Colore d'accento"
-        case .dark: "Scuro"
+        case .light: "Tema chiaro"
+        case .dark: "Tema scuro"
+        case .system: "Abbina al sistema"
+        case .artwork: "Adattamento dalla copertina dell'album"
         }
     }
 }
