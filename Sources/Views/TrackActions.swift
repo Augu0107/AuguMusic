@@ -250,7 +250,7 @@ struct AudioQuickView: View {
                     Section {
                         VStack(alignment: .leading) {
                             Text(settings.crossfadeDuration == 0 ? "Disattivato" : "\(Int(settings.crossfadeDuration)) secondi")
-                            Slider(value: $settings.crossfadeDuration, in: 0...12, step: 1)
+                            Slider(value: $settings.crossfadeDuration, in: 0...60, step: 1)
                         }
                     } footer: {
                         Text("Il brano successivo entra sfumando mentre finisce quello attuale.")
@@ -317,7 +317,7 @@ struct TrackActionsHost: ViewModifier {
                 PreviewPlayerView(track: track)
             }
             .sheet(isPresented: $ui.showPlaybackSettings) {
-                PlaybackSettingsView()
+                SpeedPitchSheet()
             }
             .sheet(item: $ui.showAudioQuick) { which in
                 AudioQuickView(which: which)

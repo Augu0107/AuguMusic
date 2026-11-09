@@ -5,11 +5,16 @@ import SwiftUI
 /// Pagine raggiungibili dentro le Impostazioni.
 enum SettingsDest: Hashable {
     case interface, theme, optionsMenus
+    case audio, eqSettings, replayGain, replayGainCalc
     case menuQueue, menuNowPlaying, menuFolders, menuAlbums, menuArtists, menuGenres, menuPlaylists
 
     var title: String {
         switch self {
         case .interface: "Interfaccia"
+        case .audio: "Audio"
+        case .eqSettings: "Equalizzatore di AuguMusic"
+        case .replayGain: "ReplayGain"
+        case .replayGainCalc: "Leggi/Calcola RG"
         case .theme: "Tema"
         case .optionsMenus: "Opzioni e menù"
         case .menuQueue: "Code"
@@ -215,7 +220,8 @@ struct SettingsSliderRow: View {
                     Text(label(value))
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
-                        .frame(width: 44)
+                        .fixedSize()
+                        .frame(minWidth: 44, alignment: .trailing)
                 }
             }
             .padding(.trailing, 20)
@@ -246,6 +252,7 @@ struct SettingsSectionHeader: View {
 struct ChoiceOption: Identifiable, Hashable {
     let id: String
     let label: String
+    var detail: String? = nil
 }
 
 /// Finestra al centro dello schermo con sfondo scuro; toccando fuori si chiude.
@@ -323,9 +330,14 @@ struct RadioDialog: View {
                         } label: {
                             HStack(spacing: 24) {
                                 RadioMark(selected: option.id == selection)
-                                Text(option.label)
-                                    .multilineTextAlignment(.leading)
-                                    .foregroundStyle(Color.primary.opacity(0.8))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.label)
+                                        .foregroundStyle(Color.primary.opacity(0.8))
+                                    if let detail = option.detail {
+                                        Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .multilineTextAlignment(.leading)
                                 Spacer(minLength: 0)
                             }
                             .padding(.horizontal, 26)
@@ -338,7 +350,7 @@ struct RadioDialog: View {
             }
             .frame(maxHeight: 460)
             .fixedSize(horizontal: false, vertical: true)
-            DialogButtons(reset: resetValue.map { value in { selection = value; close() } }, cancel: close)
+            DialogButtons(reset: resetValue.map { value in { selection = value; close() } }, cancelTitle: "CANCELLA", cancel: close)
         }
     }
 }

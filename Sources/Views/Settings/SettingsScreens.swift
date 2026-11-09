@@ -12,6 +12,10 @@ struct SettingsScreen: View {
                 .navigationDestination(for: SettingsDest.self) { dest in
                     switch dest {
                     case .interface: InterfaceSettingsPage()
+                    case .audio: AudioSettingsPage()
+                    case .eqSettings: EqualizerSettingsPage()
+                    case .replayGain: ReplayGainSettingsPage()
+                    case .replayGainCalc: ReplayGainCalcPage()
                     case .theme: ThemeSettingsPage()
                     case .optionsMenus: OptionsMenusPage()
                     case .menuQueue: QueueMenuSettingsPage()
@@ -42,6 +46,7 @@ struct SettingsRootPage: View {
                 Section {
                     SettingsRow(title: "Lingua", subtitle: "italiano", systemIcon: "globe") { showLanguage = true }
                     SettingsRow(title: "Interfaccia", systemIcon: "paintpalette.fill") { nav.path = [.interface] }
+                    SettingsRow(title: "Audio", systemIcon: "speaker.wave.2.fill") { nav.path = [.audio] }
                 }
                 .listRowInsets(EdgeInsets())
 
@@ -828,6 +833,26 @@ struct SettingsEntry: Identifiable {
             e("Opzioni per un artista/artista album/compositore", .interface, .optionsMenus),
             e("Opzioni per un Genere", .interface, .optionsMenus),
             e("Opzioni per una playlist", .interface, .optionsMenus),
+            e("Audio", .audio),
+            e("Velocità di riproduzione e Tono", .audio),
+            e("Focus audio", .audio),
+            e("Riproduzione Gapless", .audio),
+            e("Crossfade", .audio),
+            e("Sfuma il volume quando riproduci", .audio),
+            e("Sfuma il volume quando vai in pausa", .audio),
+            e("Decoder", .audio),
+            e("Equalizzatore da usare", .audio),
+            e("Equalizzatore di AuguMusic", .audio, .eqSettings),
+            e("Effetti di riverbero", .audio, .eqSettings),
+            e("Non consentire la riproduzione se il volume dell'audio è 0", .audio),
+            e("Metti in pausa quando l'audio è disattivato", .audio),
+            e("Riprendi quando l'audio è nuovamente abilitato", .audio),
+            e("ReplayGain", .audio, .replayGain),
+            e("Modalità ReplayGain", .audio, .replayGain),
+            e("Leggi/Calcola RG", .audio, .replayGain, .replayGainCalc),
+            e("Leggi/calcola automaticamente il RG della canzone corrente e la canzone successiva", .audio, .replayGain),
+            e("Preamp per file con RG", .audio, .replayGain),
+            e("Preamp per file senza RG", .audio, .replayGain),
             e("Cartelle musicali"),
             e("Aggiungi cartella"),
             e("Aggiorna la libreria"),
@@ -837,10 +862,6 @@ struct SettingsEntry: Identifiable {
             e("Widget Home"),
             e("Toccando un brano"),
             e("Numero massimo di code"),
-            e("Crossfade tra i brani"),
-            e("Dissolvenza su play e pausa"),
-            e("ReplayGain"),
-            e("Stereo / bilanciamento"),
         ]
     }()
 }

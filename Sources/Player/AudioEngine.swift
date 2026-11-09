@@ -46,16 +46,24 @@ private final class Deck {
     }
 }
 
-/// Motore audio: due piatti (player -> velocità/tono) -> mixer -> EQ (10 bande + bassi) -> uscita.
+/// Motore audio: due piatti (player -> velocità/tono) -> mixer -> EQ (10 bande + bassi) -> surround -> riverbero
+/// -> volume/mono -> uscita.
 ///
 /// I file che iOS sa aprire passano da AVAudioFile; gli altri (estensione sbagliata, Opus, Ogg, WavPack...)
 /// vengono decodificati a pezzi con SFBAudioEngine.
 final class AudioEngine {
-    static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    static let frequencies: [Float] = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
     let engine = AVAudioEngine()
     private let deckMixer = AVAudioMixerNode()
     private let eq = AVAudioUnitEQ(numberOfBands: 11)
+    private let surround = AVAudioUnitReverb()
+    private let reverb = AVAudioUnitReverb()
+    private let outMixer = AVAudioMixerNode()
+    private var isMono = false
+    /// true = prova prima SFBAudioEngine, poi il decoder di Apple.
+    var preferAuguDecoder = false
+    private var gaplessTimer: Timer?
     private let decks = [Deck(), Deck()]
     private var currentIndex = 0
     private var current: Deck { decks[currentIndex] }
@@ -95,8 +103,20 @@ final class AudioEngine {
         bass.frequency = 110
         bass.gain = 0
         bass.bypass = true
+        engine.attach(surround)
+        engine.attach(reverb)
+        engine.attach(outMixer)
+        surround.loadFactoryPreset(.mediumRoom)
+        surround.wetDryMix = 0
+        surround.bypass = true
+        reverb.loadFactoryPreset(.mediumHall)
+        reverb.wetDryMix = 0
+        reverb.bypass = true
         engine.connect(deckMixer, to: eq, format: nil)
-        engine.connect(eq, to: engine.mainMixerNode, format: nil)
+        engine.connect(eq, to: surround, format: nil)
+        engine.connect(surround, to: reverb, format: nil)
+        engine.connect(reverb, to: outMixer, format: nil)
+        engine.connect(outMixer, to: engine.mainMixerNode, format: nil)
         engine.prepare()
     }
 
@@ -141,26 +161,43 @@ final class AudioEngine {
         deck.generation += 1
         deck.player.stop()
         deck.closeSource()
-        do {
-            let file = try AVAudioFile(forReading: url)
-            reconnectIfNeeded(deck, file.processingFormat)
-            deck.file = file
-        } catch {
-            // Estensione sbagliata o formato che iOS non apre da solo: provo con SFBAudioEngine.
-            let dec = try AudioDecoder(url: url, detectContentType: true)
-            try dec.open()
-            let source = dec.processingFormat
-            guard let standard = AVAudioFormat(standardFormatWithSampleRate: source.sampleRate,
-                                               channels: source.channelCount) else { throw error }
-            deck.converter = source == standard ? nil : AVAudioConverter(from: source, to: standard)
-            reconnectIfNeeded(deck, standard)
-            deck.decoder = dec
-            deck.decoderFormat = standard
+        if preferAuguDecoder {
+            do {
+                try openWithDecoder(url, into: deck)
+            } catch {
+                try openWithSystem(url, into: deck)
+            }
+        } else {
+            do {
+                try openWithSystem(url, into: deck)
+            } catch {
+                // Estensione sbagliata o formato che iOS non apre da solo: provo con SFBAudioEngine.
+                try openWithDecoder(url, into: deck)
+            }
         }
         deck.segmentStart = 0
         deck.pausedTime = 0
         deck.player.volume = 1
         applyEffects(to: deck)
+    }
+
+    private func openWithSystem(_ url: URL, into deck: Deck) throws {
+        let file = try AVAudioFile(forReading: url)
+        reconnectIfNeeded(deck, file.processingFormat)
+        deck.file = file
+    }
+
+    private func openWithDecoder(_ url: URL, into deck: Deck) throws {
+        let dec = try AudioDecoder(url: url, detectContentType: true)
+        try dec.open()
+        let source = dec.processingFormat
+        guard let standard = AVAudioFormat(standardFormatWithSampleRate: source.sampleRate, channels: source.channelCount) else {
+            throw NSError(domain: "AuguMusic", code: 1)
+        }
+        deck.converter = source == standard ? nil : AVAudioConverter(from: source, to: standard)
+        reconnectIfNeeded(deck, standard)
+        deck.decoder = dec
+        deck.decoderFormat = standard
     }
 
     func load(url: URL) throws {
@@ -264,6 +301,35 @@ final class AudioEngine {
         }
     }
 
+    /// Gapless: il brano successivo parte sull'altro piatto esattamente quando finisce quello attuale.
+    /// Ritorna false se non si riesce a calcolare il punto preciso (allora si passa al brano normalmente).
+    func gapless(to url: URL) throws -> Bool {
+        guard !isCrossfading, engine.isRunning, current.player.isPlaying,
+              let nodeTime = current.player.lastRenderTime, nodeTime.isSampleTimeValid,
+              let playerTime = current.player.playerTime(forNodeTime: nodeTime) else { return false }
+        let outgoing = current
+        let incoming = other
+        let remainingSeconds = max(0, outgoing.duration - time(of: outgoing)) / Double(max(rate, 0.1))
+        guard remainingSeconds > 0.05 else { return false }
+        try open(url, into: incoming)
+        incoming.player.volume = 1
+        incoming.pausedTime = 0
+        schedule(incoming, from: 0)
+        let startSample = nodeTime.sampleTime + AVAudioFramePosition(remainingSeconds * nodeTime.sampleRate)
+        incoming.player.play(at: AVAudioTime(sampleTime: startSample, atRate: nodeTime.sampleRate))
+        _ = playerTime
+
+        outgoing.generation += 1
+        currentIndex = 1 - currentIndex
+        isCrossfading = true
+        crossfadeTimer?.invalidate()
+        gaplessTimer?.invalidate()
+        gaplessTimer = Timer.scheduledTimer(withTimeInterval: remainingSeconds + 0.4, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in self?.finishCrossfadeNow() }
+        }
+        return true
+    }
+
     private func crossfadeTick() {
         guard isCrossfading else { return }
         crossfadeStep += 1
@@ -277,6 +343,8 @@ final class AudioEngine {
     private func finishCrossfadeNow() {
         crossfadeTimer?.invalidate()
         crossfadeTimer = nil
+        gaplessTimer?.invalidate()
+        gaplessTimer = nil
         guard isCrossfading else { return }
         isCrossfading = false
         let outgoing = other
@@ -369,15 +437,45 @@ final class AudioEngine {
 
     // MARK: Effetti
 
-    func setEQ(enabled: Bool, gains: [Float], bass: Float) {
+    /// `bandwidth` in ottave: 1 con 10 bande, 2 con 5 bande.
+    func setEQ(enabled: Bool, gains: [Float], bass: Float, bandwidth: Float = 1) {
         for i in 0..<Self.frequencies.count {
             let band = eq.bands[i]
             band.gain = i < gains.count ? gains[i] : 0
-            band.bypass = !enabled
+            band.bandwidth = bandwidth
+            band.bypass = !enabled || band.gain == 0
         }
         let bassBand = eq.bands[10]
         bassBand.gain = bass
-        bassBand.bypass = !enabled || bass == 0
+        bassBand.bypass = bass == 0
+    }
+
+    /// Surround 0...1 (una stanza leggera mescolata al suono).
+    func setSurround(_ amount: Float) {
+        surround.wetDryMix = max(0, min(1, amount)) * 35
+        surround.bypass = amount <= 0
+    }
+
+    func setReverb(enabled: Bool, preset: AVAudioUnitReverbPreset, mix: Float) {
+        reverb.loadFactoryPreset(preset)
+        reverb.wetDryMix = max(0, min(100, mix))
+        reverb.bypass = !enabled
+    }
+
+    /// Volume interno dell'app (0...1).
+    func setOutputVolume(_ v: Float) {
+        outMixer.outputVolume = max(0, min(1, v))
+    }
+
+    /// Mono: i due canali vengono mescolati in uno solo (poi esce uguale da destra e sinistra).
+    func setMono(_ mono: Bool) {
+        guard mono != isMono else { return }
+        isMono = mono
+        let rate = engine.mainMixerNode.outputFormat(forBus: 0).sampleRate
+        let format = mono ? AVAudioFormat(standardFormatWithSampleRate: rate > 0 ? rate : 44_100, channels: 1) : nil
+        engine.disconnectNodeOutput(outMixer)
+        engine.connect(outMixer, to: engine.mainMixerNode, format: format)
+        decks.forEach(applyEffects)
     }
 
     func setGlobalGain(_ gain: Float) {
@@ -399,6 +497,7 @@ final class AudioEngine {
         deck.pitch.rate = rate
         deck.pitch.pitch = pitchCents
         deck.pitch.bypass = rate == 1 && pitchCents == 0
-        deck.player.pan = pan
+        deck.player.pan = isMono ? 0 : pan
+        outMixer.pan = isMono ? pan : 0
     }
 }

@@ -435,8 +435,8 @@ struct NowPlayingView: View {
         case "sleepTimer":
             controlButton(icon: "moon.zzz", label: sleepLabel, active: player.sleepTimer != nil) { sheet = .sleepTimer }
         case "speed":
-            controlButton(icon: "speedometer", label: settings.speed.formatted(.number.precision(.fractionLength(0...2))) + "x",
-                          active: settings.speed != 1 || settings.pitch != 0) { sheet = .playback }
+            controlButton(icon: "speedometer", label: player.effectiveSpeed.formatted(.number.precision(.fractionLength(0...2))) + "x",
+                          active: player.effectiveSpeed != 1 || settings.pitch != 0) { sheet = .playback }
         case "bookmarks":
             controlButton(icon: "bookmark", label: "Segnalibri") { sheet = .bookmarks }
         case "ab":
@@ -515,7 +515,7 @@ struct NowPlayingView: View {
         switch which {
         case .equalizer: EqualizerView()
         case .sleepTimer: SleepTimerView()
-        case .playback: PlaybackSettingsView()
+        case .playback: SpeedPitchSheet()
         case .queue:
             NavigationStack {
                 if let id = player.activeQueueID {

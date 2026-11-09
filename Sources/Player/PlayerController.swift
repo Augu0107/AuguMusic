@@ -37,6 +37,11 @@ final class PlayerController: ObservableObject {
     /// Copertina del brano attuale (nil se il brano non ne ha).
     @Published private(set) var nowPlayingImage: UIImage?
     private var sessionConfigured = false
+    private var configuredFocus = -1
+    private var pausedByMute = false
+    private var volumeObservation: NSKeyValueObservation?
+    private var lastVolume: Float = 1
+    private var analyzingRG = Set<String>()
     private var resumeAfterInterruption = false
     private var listenedSeconds: Double = 0
     private var playCounted = false
@@ -85,7 +90,51 @@ final class PlayerController: ObservableObject {
             .store(in: &cancellables)
 
         setupRemoteCommands()
+        settings.switchEQDevice(to: Self.currentOutputName())
         applyAudioSettings()
+        observeVolume()
+    }
+
+    /// Nome del dispositivo d'uscita attuale (cuffie Bluetooth, altoparlante...).
+    static func currentOutputName() -> String {
+        let output = AVAudioSession.sharedInstance().currentRoute.outputs.first
+        guard let output else { return "Altoparlante" }
+        if output.portType == .builtInSpeaker || output.portType == .builtInReceiver { return "Altoparlante" }
+        return output.portName
+    }
+
+    static func currentOutputIcon() -> String {
+        switch AVAudioSession.sharedInstance().currentRoute.outputs.first?.portType {
+        case .bluetoothA2DP, .bluetoothLE, .bluetoothHFP: "headphones"
+        case .headphones, .usbAudio: "headphones"
+        case .airPlay: "airplayaudio"
+        case .HDMI: "tv"
+        default: "speaker.wave.2.fill"
+        }
+    }
+
+    // MARK: Volume del sistema
+
+    private func observeVolume() {
+        let session = AVAudioSession.sharedInstance()
+        lastVolume = session.outputVolume
+        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
+            guard let v = change.newValue else { return }
+            Task { @MainActor in self?.volumeChanged(v) }
+        }
+    }
+
+    private func volumeChanged(_ v: Float) {
+        defer { lastVolume = v }
+        if v <= 0.001 {
+            if isPlaying && settings.pauseOnMute {
+                pausedByMute = true
+                pause()
+            }
+        } else if lastVolume <= 0.001, pausedByMute {
+            pausedByMute = false
+            if settings.pauseOnMute && settings.resumeOnUnmute { play() }
+        }
     }
 
     // MARK: Stato
@@ -129,9 +178,12 @@ final class PlayerController: ObservableObject {
 
     private func activateSession() {
         let session = AVAudioSession.sharedInstance()
-        if !sessionConfigured {
-            try? session.setCategory(.playback, mode: .default, options: [])
+        if !sessionConfigured || configuredFocus != settings.audioFocus {
+            // Livello 0: suona insieme alle altre app. Gli altri: le altre app ci mettono in pausa.
+            let options: AVAudioSession.CategoryOptions = settings.audioFocus == 0 ? [.mixWithOthers] : []
+            try? session.setCategory(.playback, mode: .default, options: options)
             sessionConfigured = true
+            configuredFocus = settings.audioFocus
         }
         try? session.setActive(true)
     }
@@ -160,9 +212,12 @@ final class PlayerController: ObservableObject {
             applyReplayGain()
             if autoplay { activateSession() }
             fadeTask?.cancel()
-            audio.volume = (autoplay && settings.fadeEnabled) ? 0 : 1
+            let fadeIn = autoplay && settings.fadeInMs > 0
+            audio.volume = fadeIn ? 0 : 1
             try audio.start(at: min(time, max(0, audio.duration - 0.5)), play: autoplay)
-            if autoplay && settings.fadeEnabled { fade(to: 1, thenPause: false) }
+            if fadeIn { fade(to: 1, thenPause: false, ms: settings.fadeInMs) }
+            applyAudioSettings()
+            analyzeReplayGainIfNeeded()
             isPlaying = autoplay
             clock.time = audio.currentTime
             queues[qi].elapsed = clock.time
@@ -206,9 +261,14 @@ final class PlayerController: ObservableObject {
             loadCurrent(autoplay: true, at: activeQueue?.elapsed ?? 0)
             return
         }
+        if settings.blockZeroVolume && AVAudioSession.sharedInstance().outputVolume <= 0.001 {
+            message = "Il volume è a 0: alzalo per ascoltare"
+            return
+        }
+        pausedByMute = false
         activateSession()
         fadeTask?.cancel()
-        if settings.fadeEnabled { audio.volume = 0 } else { audio.volume = 1 }
+        audio.volume = settings.fadeInMs > 0 ? 0 : 1
         do {
             try audio.play()
         } catch {
@@ -216,15 +276,15 @@ final class PlayerController: ObservableObject {
             return
         }
         isPlaying = true
-        if settings.fadeEnabled { fade(to: 1, thenPause: false) }
+        if settings.fadeInMs > 0 { fade(to: 1, thenPause: false, ms: settings.fadeInMs) }
         updateNowPlaying()
     }
 
     func pause() {
         guard isPlaying else { return }
         isPlaying = false
-        if settings.fadeEnabled {
-            fade(to: 0, thenPause: true)
+        if settings.fadeOutMs > 0 {
+            fade(to: 0, thenPause: true, ms: settings.fadeOutMs)
         } else {
             audio.pause()
             clock.time = audio.currentTime
@@ -238,11 +298,11 @@ final class PlayerController: ObservableObject {
         isPlaying ? pause() : play()
     }
 
-    private func fade(to target: Float, thenPause: Bool) {
+    private func fade(to target: Float, thenPause: Bool, ms: Double) {
         fadeTask?.cancel()
-        let steps = 12
+        let steps = max(2, min(40, Int(ms / 25)))
         let start = audio.volume
-        let stepDelay = UInt64(max(0.05, settings.fadeDuration) / Double(steps) * 1_000_000_000)
+        let stepDelay = UInt64(max(0.02, ms / 1000) / Double(steps) * 1_000_000_000)
         fadeTask = Task { [weak self] in
             for i in 1...steps {
                 try? await Task.sleep(nanoseconds: stepDelay)
@@ -300,7 +360,7 @@ final class PlayerController: ObservableObject {
         let t = audio.currentTime
         clock.time = t
         // Conta un ascolto dopo metà brano (al massimo 30 secondi), come le statistiche di Musicolet.
-        listenedSeconds += 0.25 * settings.speed
+        listenedSeconds += 0.25 * effectiveSpeed
         if !playCounted, let id = loadedTrackID, listenedSeconds >= min(30, max(5, duration * 0.5)) {
             playCounted = true
             UserDataStore.shared?.recordPlay(id)
@@ -374,8 +434,10 @@ final class PlayerController: ObservableObject {
     /// Quando mancano pochi secondi alla fine, fa entrare il brano successivo sovrapposto.
     private func startCrossfadeIfNeeded(currentTime t: Double) {
         let fade = settings.crossfadeDuration
-        guard fade > 0, !audio.isCrossfading, abRepeat.b == nil, duration > fade * 2,
-              let qi = activeQueueIndex, duration - t <= fade, duration - t > 0.3 else { return }
+        let useGapless = fade == 0 && settings.gapless
+        let window = useGapless ? 1.0 : fade
+        guard window > 0, !audio.isCrossfading, abRepeat.b == nil, duration > window * 2,
+              let qi = activeQueueIndex, duration - t <= window, duration - t > (useGapless ? 0.15 : 0.3) else { return }
         if stopAfterTrackID != nil, stopAfterTrackID == loadedTrackID { return }
         if let timer = sleepTimer {
             switch timer.mode {
@@ -397,7 +459,11 @@ final class PlayerController: ObservableObject {
               let next = library.byID[queues[qi].items[nextIndex]],
               let url = library.url(for: next) else { return }
         do {
-            try audio.crossfade(to: url, duration: fade)
+            if useGapless {
+                guard try audio.gapless(to: url) else { return }
+            } else {
+                try audio.crossfade(to: url, duration: fade)
+            }
         } catch {
             return // il brano successivo partirà normalmente alla fine
         }
@@ -409,7 +475,8 @@ final class PlayerController: ObservableObject {
         abRepeat = ABRepeat()
         listenedSeconds = 0
         playCounted = false
-        applyReplayGain()
+        applyAudioSettings()
+        analyzeReplayGainIfNeeded()
         loadNowPlayingArtwork(track: next, url: url)
         updateNowPlaying()
         persist()
@@ -641,27 +708,77 @@ final class PlayerController: ObservableObject {
 
     // MARK: Effetti audio
 
+    /// Velocità e tono in uso (quelli del singolo file, se ne ha di suoi).
+    var effectiveSpeed: Double { settings.speedAndPitch(for: loadedTrackID).speed }
+
     private func applyAudioSettings() {
-        audio.setEQ(enabled: settings.eqEnabled, gains: settings.eqGains.map { Float($0) }, bass: Float(settings.bassBoost))
-        audio.setRate(Float(settings.speed), pitchCents: Float(settings.pitch * 100))
-        audio.setBalance(Float(settings.balance))
+        let effects = settings.eqChoice != "none"
+        let eqOn = effects && settings.eqEnabled
+        var gains = settings.eqGains.map { Float($0) }
+        if settings.eqBands == 5 {
+            gains = gains.enumerated().map { EQPresets.fiveBandIndices.contains($0.offset) ? $0.element : 0 }
+        }
+        audio.setEQ(enabled: eqOn, gains: gains, bass: effects ? Float(settings.bassBoost) : 0,
+                    bandwidth: settings.eqBands == 5 ? 2 : 1)
+        audio.setSurround(effects ? Float(settings.surround) : 0)
+        let presets: [AVAudioUnitReverbPreset] = [.smallRoom, .mediumRoom, .largeRoom, .mediumHall, .largeHall, .cathedral, .plate]
+        audio.setReverb(enabled: effects && settings.reverbEnabled,
+                        preset: presets[max(0, min(presets.count - 1, settings.reverbPreset))],
+                        mix: Float(settings.reverbMix))
+        audio.setOutputVolume(effects ? Float(settings.eqVolume) : 1)
+        audio.setMono(effects && settings.mono)
+        let sp = settings.speedAndPitch(for: loadedTrackID)
+        audio.setRate(Float(sp.speed), pitchCents: Float(sp.pitch * 100))
+        audio.setBalance(effects ? Float(settings.balance) : 0)
+        audio.preferAuguDecoder = settings.decoder == "augu"
+        if configuredFocus >= 0 && configuredFocus != settings.audioFocus && isPlaying { activateSession() }
         applyReplayGain()
         if loadedTrackID != nil { updateNowPlaying() }
     }
 
     private func applyReplayGain() {
-        var gain = settings.eqEnabled ? settings.eqPreamp : 0
-        if let t = currentTrack {
-            switch settings.replayGain {
-            case .off:
-                break
-            case .track:
-                if let rg = t.replayGainTrack ?? t.replayGainAlbum { gain += rg + settings.replayGainPreamp }
-            case .album:
-                if let rg = t.replayGainAlbum ?? t.replayGainTrack { gain += rg + settings.replayGainPreamp }
+        var gain = settings.eqChoice != "none" ? settings.eqPreamp : 0
+        if let t = currentTrack, settings.replayGain != .off {
+            let store = ReplayGainStore.shared
+            let rg = settings.replayGain == .track ? (store.trackGain(t) ?? store.albumGain(t)) : (store.albumGain(t) ?? store.trackGain(t))
+            if let rg {
+                gain += rg + settings.replayGainPreamp
+            } else {
+                gain += settings.replayGainPreampNoRG
             }
         }
         audio.setGlobalGain(Float(gain))
+    }
+
+    /// Chiamato quando sono stati calcolati nuovi ReplayGain.
+    func replayGainDidChange() {
+        applyReplayGain()
+    }
+
+    /// "Leggi/calcola automaticamente il RG della canzone corrente e la canzone successiva".
+    private func analyzeReplayGainIfNeeded() {
+        guard settings.replayGain != .off, settings.rgAuto != "off", let qi = activeQueueIndex else { return }
+        let q = queues[qi]
+        var ids: [String] = []
+        if let id = loadedTrackID { ids.append(id) }
+        if q.index + 1 < q.items.count { ids.append(q.items[q.index + 1]) }
+        let store = ReplayGainStore.shared
+        for id in ids where !analyzingRG.contains(id) {
+            guard let t = library.byID[id], store.entries[id]?.track == nil else { continue }
+            if settings.rgAuto == "tags", t.replayGainTrack != nil { continue }
+            guard let url = library.url(for: t) else { continue }
+            analyzingRG.insert(id)
+            Task { [weak self] in
+                let blocks = await ReplayGainCalculator.analyzeDetached(url, ReplayGainCalculator.CancelFlag())
+                guard let self else { return }
+                self.analyzingRG.remove(id)
+                if let blocks, let g = LoudnessAnalyzer.gain(blocks.powers) {
+                    store.set(track: g, for: id)
+                    store.save()
+                    if id == self.loadedTrackID { self.applyReplayGain() }
+                }
+            }
+        }
     }
 
     // MARK: Sistema (interruzioni, cuffie, Bluetooth)
@@ -682,7 +799,15 @@ final class PlayerController: ObservableObject {
         case .ended:
             let optionsRaw = n.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
-            if options.contains(.shouldResume) && resumeAfterInterruption { play() }
+            // Livello 0: le interruzioni arrivano solo da chiamate/allarmi → "Riprendi al termine della chiamata".
+            // Livello 1: non riprende. Livello 2: riprende quando l'altra app ha finito.
+            let wantsResume: Bool
+            switch settings.audioFocus {
+            case 0: wantsResume = settings.resumeAfterCall
+            case 1: wantsResume = false
+            default: wantsResume = true
+            }
+            if options.contains(.shouldResume) && resumeAfterInterruption && wantsResume { play() }
             resumeAfterInterruption = false
         @unknown default:
             break
@@ -692,6 +817,7 @@ final class PlayerController: ObservableObject {
     private func handleRouteChange(_ n: Notification) {
         guard let raw = n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
               let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else { return }
+        settings.switchEQDevice(to: Self.currentOutputName())
         if reason == .oldDeviceUnavailable && isPlaying {
             isPlaying = false
             audio.pause()
@@ -768,7 +894,7 @@ final class PlayerController: ObservableObject {
             MPMediaItemPropertyAlbumTitle: t.displayAlbum,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: audio.currentTime,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? settings.speed : 0.0,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? effectiveSpeed : 0.0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
         ]
         if let q = activeQueue {

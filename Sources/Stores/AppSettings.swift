@@ -84,11 +84,25 @@ enum ReplayGainMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .off: "Disattivato"
-        case .track: "Brano"
-        case .album: "Album"
+        case .off: "spento"
+        case .track: "Track gain"
+        case .album: "Album gain"
         }
     }
+}
+
+/// Impostazioni dell'equalizzatore salvate per un dispositivo d'uscita (cuffie, altoparlante...).
+struct EQProfile: Codable {
+    var enabled: Bool
+    var gains: [Double]
+    var preamp: Double
+    var bassBoost: Double
+    var surround: Double
+    var presetName: String
+    var volume: Double
+    var mono: Bool
+    var balance: Double
+    var bands: Int
 }
 
 enum WidgetStyle: String, CaseIterable, Identifiable {
@@ -110,7 +124,9 @@ struct EQPreset: Identifiable {
 }
 
 enum EQPresets {
-    static let frequencyLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+    static let frequencyLabels = ["31,5", "63", "125", "250", "500", "1 k", "2 k", "4 k", "8 k", "16 k"]
+    /// Con 5 bande: quali delle 10 si usano (le altre restano a 0).
+    static let fiveBandIndices = [1, 3, 5, 7, 9]
 
     static let builtIn: [EQPreset] = [
         EQPreset(name: "Flat", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
@@ -139,8 +155,28 @@ final class AppSettings: ObservableObject {
     @Published var confirmQueueRemoval: Bool { didSet { defaults.set(confirmQueueRemoval, forKey: "confirmQueueRemoval") } }
     @Published var keepScreenOn: Bool { didSet { defaults.set(keepScreenOn, forKey: "keepScreenOn") } }
 
-    @Published var fadeEnabled: Bool { didSet { defaults.set(fadeEnabled, forKey: "fadeEnabled") } }
-    @Published var fadeDuration: Double { didSet { defaults.set(fadeDuration, forKey: "fadeDuration") } }
+    /// Sfumatura del volume quando parte / va in pausa, in millisecondi (0 = niente).
+    @Published var fadeInMs: Double { didSet { defaults.set(fadeInMs, forKey: "fadeInMs") } }
+    @Published var fadeOutMs: Double { didSet { defaults.set(fadeOutMs, forKey: "fadeOutMs") } }
+    @Published var gapless: Bool { didSet { defaults.set(gapless, forKey: "gapless") } }
+    /// Focus audio: 0 = suona insieme alle altre app, 1 = pausa per le altre app, 2 = pausa e poi riprende.
+    @Published var audioFocus: Int { didSet { defaults.set(audioFocus, forKey: "audioFocus") } }
+    @Published var resumeAfterCall: Bool { didSet { defaults.set(resumeAfterCall, forKey: "resumeAfterCall") } }
+    /// "augu" = prima SFBAudioEngine, "system" = prima il decoder di Apple.
+    @Published var decoder: String { didSet { defaults.set(decoder, forKey: "decoder") } }
+    /// "augu" = equalizzatore dell'app, "none" = nessun effetto.
+    @Published var eqChoice: String { didSet { defaults.set(eqChoice, forKey: "eqChoice") } }
+    @Published var reverbEnabled: Bool { didSet { defaults.set(reverbEnabled, forKey: "reverbEnabled") } }
+    @Published var reverbPreset: Int { didSet { defaults.set(reverbPreset, forKey: "reverbPreset") } }
+    @Published var reverbMix: Double { didSet { defaults.set(reverbMix, forKey: "reverbMix") } }
+    @Published var blockZeroVolume: Bool { didSet { defaults.set(blockZeroVolume, forKey: "blockZeroVolume") } }
+    @Published var pauseOnMute: Bool { didSet { defaults.set(pauseOnMute, forKey: "pauseOnMute") } }
+    @Published var resumeOnUnmute: Bool { didSet { defaults.set(resumeOnUnmute, forKey: "resumeOnUnmute") } }
+    @Published var replayGainPreampNoRG: Double { didSet { defaults.set(replayGainPreampNoRG, forKey: "replayGainPreampNoRG") } }
+    /// Leggi/calcola RG del brano attuale e del successivo: "off", "tags", "analyze".
+    @Published var rgAuto: String { didSet { defaults.set(rgAuto, forKey: "rgAuto") } }
+    /// Velocità e tono salvati per singoli file: id brano → [velocità, semitoni].
+    @Published var fileSpeeds: [String: [Double]] { didSet { defaults.set(fileSpeeds, forKey: "fileSpeeds") } }
     /// Secondi di sovrapposizione tra un brano e il successivo (0 = stacco netto).
     @Published var crossfadeDuration: Double { didSet { defaults.set(crossfadeDuration, forKey: "crossfadeDuration") } }
     @Published var replayGain: ReplayGainMode { didSet { defaults.set(replayGain.rawValue, forKey: "replayGain") } }
@@ -150,6 +186,19 @@ final class AppSettings: ObservableObject {
     @Published var eqGains: [Double] { didSet { defaults.set(eqGains, forKey: "eqGains") } }
     @Published var eqPreamp: Double { didSet { defaults.set(eqPreamp, forKey: "eqPreamp") } }
     @Published var bassBoost: Double { didSet { defaults.set(bassBoost, forKey: "bassBoost") } }
+    /// Suono surround 0...1.
+    @Published var surround: Double { didSet { defaults.set(surround, forKey: "surround") } }
+    /// Volume interno dell'app 0...1.
+    @Published var eqVolume: Double { didSet { defaults.set(eqVolume, forKey: "eqVolume") } }
+    @Published var mono: Bool { didSet { defaults.set(mono, forKey: "mono") } }
+    /// Numero di bande mostrate: 5 o 10.
+    @Published var eqBands: Int { didSet { defaults.set(eqBands, forKey: "eqBands") } }
+    /// Dispositivo d'uscita a cui appartengono le impostazioni attuali dell'equalizzatore.
+    @Published private(set) var eqDevice: String { didSet { defaults.set(eqDevice, forKey: "eqDevice") } }
+    /// Impostazioni salvate degli altri dispositivi.
+    @Published private(set) var eqProfiles: [String: EQProfile] {
+        didSet { defaults.set(try? JSONEncoder().encode(eqProfiles), forKey: "eqProfiles") }
+    }
     @Published var eqPresetName: String { didSet { defaults.set(eqPresetName, forKey: "eqPresetName") } }
     @Published var customPresets: [String: [Double]] { didSet { defaults.set(customPresets, forKey: "customPresets") } }
 
@@ -181,11 +230,27 @@ final class AppSettings: ObservableObject {
             d.set(false, forKey: "fadeEnabled")
             d.set(true, forKey: "fadeOffV1")
         }
-        fadeEnabled = bool("fadeEnabled", false)
-        fadeDuration = double("fadeDuration", 0.4)
+        // Dalla v0.7 la dissolvenza è in millisecondi, separata per play e pausa.
+        let oldFade = d.bool(forKey: "fadeEnabled") ? (d.object(forKey: "fadeDuration") as? Double ?? 0.4) * 1000 : 0
+        fadeInMs = double("fadeInMs", oldFade)
+        fadeOutMs = double("fadeOutMs", oldFade)
+        gapless = bool("gapless", true)
+        audioFocus = d.object(forKey: "audioFocus") as? Int ?? 2
+        resumeAfterCall = bool("resumeAfterCall", true)
+        decoder = d.string(forKey: "decoder") ?? "system"
+        eqChoice = d.string(forKey: "eqChoice") ?? "augu"
+        reverbEnabled = bool("reverbEnabled", false)
+        reverbPreset = d.object(forKey: "reverbPreset") as? Int ?? 1
+        reverbMix = double("reverbMix", 25)
+        blockZeroVolume = bool("blockZeroVolume", true)
+        pauseOnMute = bool("pauseOnMute", true)
+        resumeOnUnmute = bool("resumeOnUnmute", true)
         crossfadeDuration = double("crossfadeDuration", 3)
         replayGain = ReplayGainMode(rawValue: d.string(forKey: "replayGain") ?? "") ?? .off
         replayGainPreamp = double("replayGainPreamp", 0)
+        replayGainPreampNoRG = double("replayGainPreampNoRG", 0)
+        rgAuto = d.string(forKey: "rgAuto") ?? "analyze"
+        fileSpeeds = d.dictionary(forKey: "fileSpeeds") as? [String: [Double]] ?? [:]
 
         eqEnabled = bool("eqEnabled", false)
         var gains = d.array(forKey: "eqGains") as? [Double] ?? []
@@ -193,6 +258,16 @@ final class AppSettings: ObservableObject {
         eqGains = gains
         eqPreamp = double("eqPreamp", 0)
         bassBoost = double("bassBoost", 0)
+        surround = double("surround", 0)
+        eqVolume = double("eqVolume", 1)
+        mono = bool("mono", false)
+        eqBands = d.object(forKey: "eqBands") as? Int ?? 10
+        eqDevice = d.string(forKey: "eqDevice") ?? ""
+        if let data = d.data(forKey: "eqProfiles"), let profiles = try? JSONDecoder().decode([String: EQProfile].self, from: data) {
+            eqProfiles = profiles
+        } else {
+            eqProfiles = [:]
+        }
         eqPresetName = d.string(forKey: "eqPresetName") ?? "Flat"
         customPresets = d.dictionary(forKey: "customPresets") as? [String: [Double]] ?? [:]
 
@@ -232,5 +307,56 @@ final class AppSettings: ObservableObject {
         speed = 1
         pitch = 0
         balance = 0
+    }
+
+    // MARK: Equalizzatore per dispositivo
+
+    var currentEQProfile: EQProfile {
+        EQProfile(enabled: eqEnabled, gains: eqGains, preamp: eqPreamp, bassBoost: bassBoost, surround: surround,
+                  presetName: eqPresetName, volume: eqVolume, mono: mono, balance: balance, bands: eqBands)
+    }
+
+    private func apply(_ p: EQProfile) {
+        eqEnabled = p.enabled
+        eqGains = p.gains.count == 10 ? p.gains : Array(repeating: 0, count: 10)
+        eqPreamp = p.preamp
+        bassBoost = p.bassBoost
+        surround = p.surround
+        eqPresetName = p.presetName
+        eqVolume = p.volume
+        mono = p.mono
+        balance = p.balance
+        eqBands = p.bands
+    }
+
+    /// Le cuffie/l'altoparlante sono cambiati: salva le impostazioni del vecchio e carica quelle del nuovo.
+    func switchEQDevice(to name: String) {
+        guard !name.isEmpty, name != eqDevice else { return }
+        if !eqDevice.isEmpty { eqProfiles[eqDevice] = currentEQProfile }
+        if let saved = eqProfiles[name] { apply(saved) }
+        eqProfiles[name] = nil
+        eqDevice = name
+    }
+
+    var otherEQDevices: [String] { eqProfiles.keys.sorted() }
+
+    func forgetEQDevice(_ name: String) { eqProfiles[name] = nil }
+
+    func resetEQ() {
+        eqGains = Array(repeating: 0, count: 10)
+        eqPresetName = "Flat"
+        eqPreamp = 0
+        bassBoost = 0
+        surround = 0
+        eqVolume = 1
+        mono = false
+        balance = 0
+    }
+
+    // MARK: Velocità per file
+
+    func speedAndPitch(for trackID: String?) -> (speed: Double, pitch: Double, perFile: Bool) {
+        if let id = trackID, let v = fileSpeeds[id], v.count == 2 { return (v[0], v[1], true) }
+        return (speed, pitch, false)
     }
 }
