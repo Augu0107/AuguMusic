@@ -104,6 +104,9 @@ struct QueueDetailView: View {
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var library: LibraryStore
     @State private var query = ""
+    @AppStorage(Prefs.queueArtwork) private var showArtwork = true
+    @AppStorage(Prefs.queueSwipeRemove) private var swipeRemove = true
+    @AppStorage(Prefs.queueSearch) private var showSearch = true
 
     var body: some View {
         if let q = player.queue(queueID) {
@@ -128,7 +131,7 @@ struct QueueDetailView: View {
                 }
             }
             .navigationTitle(embedded ? "" : q.name)
-            .searchable(text: $query, prompt: "Cerca in questa coda")
+            .modifier(OptionalSearch(enabled: showSearch, query: $query, prompt: "Cerca in questa coda"))
             .toolbar {
                 if !embedded {
                     ToolbarItemGroup(placement: .primaryAction) {
@@ -163,8 +166,15 @@ struct QueueDetailView: View {
     private func row(q: PlayQueue, index: Int, id: String) -> some View {
         let isCurrent = q.id == player.activeQueueID && index == q.index
         if let track = library.byID[id] {
-            TrackListRow(track: track, isCurrent: isCurrent, leadingNumber: index + 1, sourceName: q.name) {
+            TrackListRow(track: track, isCurrent: isCurrent, showArtwork: showArtwork, leadingNumber: index + 1, sourceName: q.name) {
                 player.playQueueItem(queueID: queueID, index: index)
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if swipeRemove {
+                    Button(role: .destructive) { player.removeFromQueue(queueID, at: IndexSet(integer: index)) } label: {
+                        Label("Rimuovi", systemImage: "trash")
+                    }
+                }
             }
         } else {
             Text("Brano non disponibile").foregroundStyle(.secondary)
@@ -180,6 +190,12 @@ struct PlaylistsView: View {
     @EnvironmentObject private var player: PlayerController
     @State private var showNew = false
     @State private var newName = ""
+    @State private var query = ""
+    @AppStorage(Prefs.playlistsSearch) private var searchEnabled = true
+
+    private var filteredPlaylists: [Playlist] {
+        query.isEmpty ? userData.playlists : userData.playlists.filter { $0.name.matchesSearch(query) }
+    }
 
     var body: some View {
         List {
@@ -196,7 +212,7 @@ struct PlaylistsView: View {
                 .padding(.top, 14)
                 .listRowSeparator(.hidden)
 
-            ForEach(userData.playlists) { p in
+            ForEach(filteredPlaylists) { p in
                 NavigationLink(value: Route.playlist(p.id)) {
                     HStack(spacing: 14) {
                         AppIconView(glyph: .playlist, size: 20)
@@ -210,13 +226,14 @@ struct PlaylistsView: View {
                 }
                 .listRowSeparator(.hidden)
                 .contextMenu {
-                    TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false)
+                    TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false, menuKey: Prefs.menuPlaylist)
                     Divider()
                     Button(role: .destructive) { userData.deletePlaylist(p.id) } label: { Label("Elimina playlist", systemImage: "trash") }
                 }
             }
             .onDelete { offsets in
-                let ids = offsets.map { userData.playlists[$0].id }
+                let list = filteredPlaylists
+                let ids = offsets.map { list[$0].id }
                 for id in ids { userData.deletePlaylist(id) }
             }
 
@@ -231,6 +248,7 @@ struct PlaylistsView: View {
         .listStyle(.plain)
         .themedBackground()
         .navigationTitle("Playlist")
+        .modifier(OptionalSearch(enabled: searchEnabled, query: $query, prompt: "Cerca playlist"))
         .alert("Nuova playlist", isPresented: $showNew) {
             TextField("Nome", text: $newName)
             Button("Crea") { userData.createPlaylist(name: newName) }
@@ -293,9 +311,27 @@ struct SmartListView: View {
 }
 
 /// Scheda Coda: la coda attiva, con il selettore delle code in alto.
+/// Casella di ricerca che si può spegnere dalle Impostazioni ("Casella di ricerca rapida").
+struct OptionalSearch: ViewModifier {
+    let enabled: Bool
+    @Binding var query: String
+    let prompt: String
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.searchable(text: $query, prompt: prompt)
+        } else {
+            content.onAppear { query = "" }
+        }
+    }
+}
+
 struct QueueTabView: View {
     @EnvironmentObject private var player: PlayerController
+    @EnvironmentObject private var settings: AppSettings
     @State private var showAllQueues = false
+    @State private var confirmRemoveOthers = false
+    @AppStorage(Prefs.queueRemoveOthers) private var removeOthers = true
 
     var body: some View {
         Group {
@@ -323,10 +359,20 @@ struct QueueTabView: View {
                     }
                     Divider()
                     Button { showAllQueues = true } label: { Label("Gestisci le code…", systemImage: "list.number") }
+                    if removeOthers && player.queues.count > 1 {
+                        Button(role: .destructive) {
+                            if settings.confirmQueueRemoval { confirmRemoveOthers = true } else { removeOtherQueues() }
+                        } label: {
+                            Label("Elimina tutte le code tranne quella in riproduzione", systemImage: "trash")
+                        }
+                    }
                 } label: {
                     Label("Code (\(player.queues.count))", systemImage: "rectangle.stack")
                 }
             }
+        }
+        .confirmationDialog("Eliminare tutte le altre code?", isPresented: $confirmRemoveOthers, titleVisibility: .visible) {
+            Button("Elimina", role: .destructive) { removeOtherQueues() }
         }
         .sheet(isPresented: $showAllQueues) {
             NavigationStack {
@@ -337,6 +383,10 @@ struct QueueTabView: View {
                     }
             }
         }
+    }
+
+    private func removeOtherQueues() {
+        for q in player.queues where q.id != player.activeQueueID { player.removeQueue(q.id) }
     }
 }
 
@@ -403,7 +453,7 @@ struct PlaylistDetailView: View {
                     ToolbarItemGroup(placement: .primaryAction) {
                         EditButton()
                         Menu {
-                            TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false)
+                            TrackMenu(tracks: library.tracks(for: p.items), sourceName: p.name, showNavigation: false, menuKey: Prefs.menuPlaylist)
                             Divider()
                             Button {
                                 newName = p.name

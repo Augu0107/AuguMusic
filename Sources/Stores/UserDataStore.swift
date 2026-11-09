@@ -51,6 +51,12 @@ final class UserDataStore: ObservableObject {
 
     func playCount(_ id: String) -> Int { stats[id]?.count ?? 0 }
 
+    func clearHistory(_ ids: [String]) {
+        var copy = stats
+        for id in ids { copy[id] = nil }
+        stats = copy
+    }
+
     // MARK: Preferiti
 
     func isFavorite(_ id: String) -> Bool { favoriteSet.contains(id) }
@@ -132,6 +138,22 @@ final class UIState: ObservableObject {
     @Published var infoTrack: Track?
     @Published var tagEditor: TrackIDList?
     @Published var toast: String?
+    @Published var showSettings = false
+    /// Pagina delle Impostazioni da aprire direttamente (es. "Mostra/nascondi/personalizza").
+    var settingsStart: [SettingsDest] = []
+    @Published var fileTransfer: FileTransferRequest?
+    @Published var deleteRequest: TrackIDList?
+    @Published var previewTrack: Track?
+    @Published var renameFolder: TrackGroup?
+    @Published var showPlaybackSettings = false
+    @Published var showAudioQuick: AudioQuickSheet?
+
+    func openSettings(_ path: [SettingsDest] = []) {
+        settingsStart = path
+        showSettings = true
+    }
+    /// Aumenta quando in Impostazioni si sceglie "Reset la Cartella musicale principale".
+    @Published var resetFolderTree = 0
 
     private var toastTask: Task<Void, Never>?
 

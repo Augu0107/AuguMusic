@@ -320,170 +320,176 @@ struct TrackInfoView: View {
     }
 }
 
-// MARK: - Impostazioni
+// MARK: - Impostazioni (opzioni non ancora divise in categorie)
 
-struct SettingsView: View {
+/// Sezioni che restano sotto "Lingua" e "Interfaccia" finché non creiamo le loro categorie.
+struct OtherSettingsSections: View {
+    @Binding var showImporter: Bool
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var progress: ScanProgress
-    @State private var showImporter = false
+    @AppStorage(Prefs.excludedFolders) private var excluded = ""
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(library.folders) { folder in
-                    HStack(spacing: 12) {
-                        Image(systemName: folder.isAppDocuments ? "ipad" : "folder.fill")
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(folder.isAppDocuments ? "Sull'iPad › AuguMusic" : folder.name)
-                            Text(library.isAvailable(folder.id) ? "\(library.trackCount(in: folder.id)) brani" : "Non raggiungibile (ricollegala)")
-                                .font(.caption)
-                                .foregroundStyle(library.isAvailable(folder.id) ? Color.secondary : Color.red)
-                        }
-                    }
-                    .swipeActions {
-                        if !folder.isAppDocuments {
-                            Button(role: .destructive) { library.removeFolder(folder.id) } label: {
-                                Label("Rimuovi", systemImage: "trash")
-                            }
-                        }
+        Section {
+            ForEach(library.folders) { folder in
+                HStack(spacing: 12) {
+                    Image(systemName: folder.isAppDocuments ? "ipad" : "folder.fill")
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(folder.isAppDocuments ? "Sull'iPad › AuguMusic" : folder.name)
+                        Text(library.isAvailable(folder.id) ? "\(library.trackCount(in: folder.id)) brani" : "Non raggiungibile (ricollegala)")
+                            .font(.caption)
+                            .foregroundStyle(library.isAvailable(folder.id) ? Color.secondary : Color.red)
                     }
                 }
-                Button { showImporter = true } label: {
-                    Label("Aggiungi cartella…", systemImage: "folder.badge.plus")
-                }
-                Button {
-                    Task { await library.rescan() }
-                } label: {
-                    if library.isScanning {
-                        Label(progress.total > 0 ? "Scansione \(progress.done)/\(progress.total)…" : "Scansione…", systemImage: "hourglass")
-                    } else {
-                        Label("Aggiorna la libreria", systemImage: "arrow.clockwise")
-                    }
-                }
-                .disabled(library.isScanning)
-            } header: {
-                Text("Cartelle musicali · \(library.tracks.count) brani")
-            } footer: {
-                Text("Copia la musica nella cartella AuguMusic dell'app File (Sull'iPad), oppure aggiungi qualsiasi cartella: iCloud Drive, una chiavetta USB-C, un disco esterno o un server SMB. Scorri a sinistra per rimuovere una cartella.")
-            }
-
-            Section {
-                StringListEditor(items: $settings.artistSeparators, placeholder: "Nuovo separatore (es. &, feat., /)", showQuotes: true)
-            } header: {
-                Text("Separatori artisti")
-            } footer: {
-                Text("Con \"&\", \"Karen Méndez & Mike Bahía\" diventano due artisti distinti. Vale per artisti, artisti album e compositori. Gli spazi contano: \" x \" non divide \"Max\".")
-            }
-
-            Section {
-                StringListEditor(items: $settings.artistExceptions, placeholder: "Es. Simon & Garfunkel", showQuotes: false)
-            } header: {
-                Text("Eccezioni (mai divisi)")
-            } footer: {
-                Text("Nomi che contengono un separatore ma sono un solo artista.")
-            }
-
-            Section {
-                ForEach(MainTab.allCases.filter { !$0.isRequired }) { item in
-                    Toggle(isOn: Binding(get: { !settings.isTabHidden(item.rawValue) },
-                                         set: { settings.setTab(item.rawValue, hidden: !$0) })) {
-                        Label {
-                            Text(item.title)
-                        } icon: {
-                            AppIconView(glyph: item.glyph, size: 20)
+                .swipeActions {
+                    if !folder.isAppDocuments {
+                        Button(role: .destructive) { library.removeFolder(folder.id) } label: {
+                            Label("Rimuovi", systemImage: "trash")
                         }
                     }
                 }
-                Picker("Scheda all'avvio", selection: $settings.startTab) {
-                    ForEach(MainTab.allCases) { item in
-                        Text(item.title).tag(item.rawValue)
-                    }
-                }
-            } header: {
-                Text("Schede visibili")
-            } footer: {
-                Text("Puoi anche tenere premuta una scheda nella barra in basso e scegliere \"Nascondi\". Coda e In riproduzione restano sempre visibili.")
             }
-
-            Section("Aspetto") {
-                Picker("Tema", selection: $settings.theme) {
-                    ForEach(AppTheme.allCases) { Text($0.label).tag($0) }
-                }
-                Picker("Colore", selection: $settings.accent) {
-                    ForEach(AccentChoice.allCases) { choice in
-                        Text(choice.label).tag(choice)
-                    }
-                }
-                Toggle("Schermo sempre acceso in riproduzione", isOn: $settings.keepScreenOn)
+            Button { showImporter = true } label: {
+                Label("Aggiungi cartella…", systemImage: "folder.badge.plus")
             }
+            Button {
+                Task { await library.rescan() }
+            } label: {
+                if library.isScanning {
+                    Label(progress.total > 0 ? "Scansione \(progress.done)/\(progress.total)…" : "Scansione…", systemImage: "hourglass")
+                } else {
+                    Label("Aggiorna la libreria", systemImage: "arrow.clockwise")
+                }
+            }
+            .disabled(library.isScanning)
+        } header: {
+            Text("Cartelle musicali · \(library.tracks.count) brani")
+        } footer: {
+            Text("Copia la musica nella cartella AuguMusic dell'app File (Sull'iPad), oppure aggiungi qualsiasi cartella: iCloud Drive, una chiavetta USB-C, un disco esterno o un server SMB. Scorri a sinistra per rimuovere una cartella.")
+        }
 
+        let excludedList = ExcludedFolders.list(excluded)
+        if !excludedList.isEmpty {
             Section {
-                Picker("Colore del widget", selection: $settings.widgetStyle) {
-                    ForEach(WidgetStyle.allCases) { Text($0.label).tag($0) }
-                }
-                if !WidgetBridge.shared.isAvailable {
-                    Text("Il widget non riesce a ricevere i dati: l'App Group non è attivo. Prova a reinstallare l'app con AltStore.")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-            } header: {
-                Text("Widget Home")
-            } footer: {
-                Text("Tieni premuto sulla Home dell'iPad → Modifica → Aggiungi widget → AuguMusic.")
-            }
-
-            Section {
-                Picker("Toccando un brano", selection: $settings.tapAction) {
-                    ForEach(TapAction.allCases) { Text($0.label).tag($0) }
-                }
-                Stepper("Numero massimo di code: \(settings.maxQueues)", value: $settings.maxQueues, in: 2...50)
-                Toggle("Conferma prima di rimuovere una coda", isOn: $settings.confirmQueueRemoval)
-            } header: {
-                Text("Code")
-            }
-
-            Section("Riproduzione") {
-                VStack(alignment: .leading) {
-                    Text(settings.crossfadeDuration == 0
-                         ? "Crossfade tra i brani: disattivato"
-                         : "Crossfade tra i brani: \(Int(settings.crossfadeDuration)) s")
-                    Slider(value: $settings.crossfadeDuration, in: 0...12, step: 1)
-                }
-                Toggle("Dissolvenza su play e pausa", isOn: $settings.fadeEnabled)
-                if settings.fadeEnabled {
-                    VStack(alignment: .leading) {
-                        Text("Durata dissolvenza: \(settings.fadeDuration.formatted(.number.precision(.fractionLength(1)))) s")
-                        Slider(value: $settings.fadeDuration, in: 0.1...3, step: 0.1)
+                ForEach(excludedList, id: \.self) { path in
+                    HStack {
+                        Image(systemName: "folder.badge.minus").foregroundStyle(.secondary)
+                        Text(ExcludedFolders.displayName(path)).font(.callout)
+                        Spacer()
+                        Button("Includi") {
+                            excluded = ExcludedFolders.removing(path, from: excluded)
+                            Task { await library.rescan() }
+                        }
+                        .buttonStyle(.borderless)
                     }
                 }
-                Picker("ReplayGain", selection: $settings.replayGain) {
-                    ForEach(ReplayGainMode.allCases) { Text($0.label).tag($0) }
-                }
-                if settings.replayGain != .off {
-                    VStack(alignment: .leading) {
-                        Text("Preamp ReplayGain: \(String(format: "%+.1f", settings.replayGainPreamp)) dB")
-                        Slider(value: $settings.replayGainPreamp, in: -12...12, step: 0.5)
-                    }
-                }
+            } header: {
+                Text("Cartelle escluse dalla scansione")
             }
+        }
 
-            Section("Informazioni") {
-                LabeledContent("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
-                Text("AuguMusic è un'app personale di Chiara, ispirata a Musicolet. Funziona solo con file locali: niente account, niente pubblicità, niente internet.")
+        Section {
+            StringListEditor(items: $settings.artistSeparators, placeholder: "Nuovo separatore (es. &, feat., /)", showQuotes: true)
+        } header: {
+            Text("Separatori artisti")
+        } footer: {
+            Text("Con \"&\", \"Karen Méndez & Mike Bahía\" diventano due artisti distinti. Vale per artisti, artisti album e compositori. Gli spazi contano: \" x \" non divide \"Max\".")
+        }
+
+        Section {
+            StringListEditor(items: $settings.artistExceptions, placeholder: "Es. Simon & Garfunkel", showQuotes: false)
+        } header: {
+            Text("Eccezioni (mai divisi)")
+        } footer: {
+            Text("Nomi che contengono un separatore ma sono un solo artista.")
+        }
+
+        Section {
+            Picker("Colore del widget", selection: $settings.widgetStyle) {
+                ForEach(WidgetStyle.allCases) { Text($0.label).tag($0) }
+            }
+            if !WidgetBridge.shared.isAvailable {
+                Text("Il widget non riesce a ricevere i dati: l'App Group non è attivo. Prova a reinstallare l'app con AltStore.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Widget Home")
+        } footer: {
+            Text("Tieni premuto sulla Home dell'iPad → Modifica → Aggiungi widget → AuguMusic.")
+        }
+
+        Section {
+            Picker("Toccando un brano", selection: $settings.tapAction) {
+                ForEach(TapAction.allCases) { Text($0.label).tag($0) }
+            }
+            Stepper("Numero massimo di code: \(settings.maxQueues)", value: $settings.maxQueues, in: 2...50)
+        } header: {
+            Text("Code")
+        }
+
+        Section("Riproduzione") {
+            VStack(alignment: .leading) {
+                Text(settings.crossfadeDuration == 0
+                     ? "Crossfade tra i brani: disattivato"
+                     : "Crossfade tra i brani: \(Int(settings.crossfadeDuration)) s")
+                Slider(value: $settings.crossfadeDuration, in: 0...12, step: 1)
+            }
+            Toggle("Dissolvenza su play e pausa", isOn: $settings.fadeEnabled)
+            if settings.fadeEnabled {
+                VStack(alignment: .leading) {
+                    Text("Durata dissolvenza: \(settings.fadeDuration.formatted(.number.precision(.fractionLength(1)))) s")
+                    Slider(value: $settings.fadeDuration, in: 0.1...3, step: 0.1)
+                }
+            }
+            Picker("ReplayGain", selection: $settings.replayGain) {
+                ForEach(ReplayGainMode.allCases) { Text($0.label).tag($0) }
+            }
+            if settings.replayGain != .off {
+                VStack(alignment: .leading) {
+                    Text("Preamp ReplayGain: \(String(format: "%+.1f", settings.replayGainPreamp)) dB")
+                    Slider(value: $settings.replayGainPreamp, in: -12...12, step: 0.5)
+                }
             }
         }
-        .themedBackground()
-        .navigationTitle("Impostazioni")
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                library.addFolder(url)
-            }
+
+        Section("Informazioni") {
+            LabeledContent("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
+            Text("AuguMusic è un'app personale di Chiara, ispirata a Musicolet. Funziona solo con file locali: niente account, niente pubblicità, niente internet.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Cartelle escluse dalla scansione, salvate una per riga (percorso relativo, es. "AuguMusic/Podcast").
+enum ExcludedFolders {
+    static func list(_ stored: String) -> [String] {
+        stored.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    }
+
+    static func adding(_ path: String, to stored: String) -> String {
+        var l = list(stored)
+        if !l.contains(path) { l.append(path) }
+        return l.joined(separator: "\n")
+    }
+
+    static func removing(_ path: String, from stored: String) -> String {
+        list(stored).filter { $0 != path }.joined(separator: "\n")
+    }
+
+    /// "uuid|Musica/Podcast" → "Musica/Podcast".
+    static func displayName(_ key: String) -> String {
+        let dir = key.split(separator: "|", maxSplits: 1).dropFirst().first.map(String.init) ?? key
+        return dir.isEmpty ? "Cartella principale" : dir
+    }
+
+    /// Vero se il file (percorso relativo) sta dentro una cartella esclusa.
+    static func isExcluded(_ relativePath: String, stored: String) -> Bool {
+        list(stored).contains { relativePath == $0 || relativePath.hasPrefix($0 + "/") }
     }
 }
 

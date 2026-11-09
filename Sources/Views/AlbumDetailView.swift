@@ -28,6 +28,7 @@ struct AlbumDetailView: View {
     @State private var filterKind: FilterKind = .artists
     @State private var selectedName: String?
     @State private var showSearch = false
+    @AppStorage(Prefs.albumsSplit) private var split = true
 
     private func names(for t: Track) -> [String] {
         switch filterKind {
@@ -64,6 +65,7 @@ struct AlbumDetailView: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
 
+                if split {
                 Picker("Filtra per", selection: $filterKind) {
                     ForEach(FilterKind.allCases) { Text($0.label).tag($0) }
                 }
@@ -80,6 +82,7 @@ struct AlbumDetailView: View {
                         }
                     }
                     .padding(.vertical, 2)
+                }
                 }
             }
             .listRowSeparator(.hidden)
@@ -128,7 +131,7 @@ struct AlbumDetailView: View {
                 }
                 .disabled(shown.isEmpty)
                 Menu {
-                    TrackMenu(tracks: shown, sourceName: album.name, showNavigation: false)
+                    TrackMenu(tracks: shown, sourceName: album.name, showNavigation: false, menuKey: Prefs.menuAlbum)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

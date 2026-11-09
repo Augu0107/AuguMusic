@@ -1,54 +1,69 @@
 import SwiftUI
 
 enum AppTheme: String, CaseIterable, Identifiable {
-    case system, light, dark, black
+    case light, dark, black, timeBased, system
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .system: "Automatico"
-        case .light: "Chiaro"
-        case .dark: "Scuro"
-        case .black: "Nero (AMOLED)"
+        case .light: "Tema chiaro"
+        case .dark: "Tema scuro"
+        case .black: "Tema nero (AMOLED)"
+        case .timeBased: "Giorno/notte tempo"
+        case .system: "Segui il tema chiaro/scuro del sistema"
         }
     }
 
+    /// Giorno/notte: chiaro dalle 7 alle 19, scuro il resto del tempo.
     var colorScheme: ColorScheme? {
         switch self {
-        case .system: nil
-        case .light: .light
-        case .dark, .black: .dark
+        case .system: return nil
+        case .light: return .light
+        case .dark, .black: return .dark
+        case .timeBased:
+            let hour = Calendar.current.component(.hour, from: Date())
+            return (7..<19).contains(hour) ? .light : .dark
         }
     }
 }
 
 enum AccentChoice: String, CaseIterable, Identifiable {
-    case orange, blue, teal, green, pink, purple, red, yellow
+    case orange, red, pink, purple, indigo, blue, cyan, teal, mint, green, yellow, brown, gray
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .orange: "Arancione"
-        case .blue: "Blu"
-        case .teal: "Verde acqua"
-        case .green: "Verde"
+        case .red: "Rosso"
         case .pink: "Rosa"
         case .purple: "Viola"
-        case .red: "Rosso"
+        case .indigo: "Indaco"
+        case .blue: "Blu"
+        case .cyan: "Azzurro"
+        case .teal: "Verde acqua"
+        case .mint: "Menta"
+        case .green: "Verde"
         case .yellow: "Giallo"
+        case .brown: "Marrone"
+        case .gray: "Grigio"
         }
     }
 
     var color: Color {
         switch self {
-        case .orange: .orange
-        case .blue: .blue
-        case .teal: .teal
-        case .green: .green
+        case .orange: Color(red: 1.0, green: 0.55, blue: 0.24)
+        case .red: .red
         case .pink: .pink
         case .purple: .purple
-        case .red: .red
+        case .indigo: .indigo
+        case .blue: .blue
+        case .cyan: .cyan
+        case .teal: .teal
+        case .mint: .mint
+        case .green: .green
         case .yellow: .yellow
+        case .brown: .brown
+        case .gray: .gray
         }
     }
 }

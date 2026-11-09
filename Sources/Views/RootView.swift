@@ -37,7 +37,17 @@ enum MainTab: String, Hashable, CaseIterable, Identifiable {
     }
 
     /// Schede che non si possono nascondere.
-    var isRequired: Bool { self == .queue || self == .nowPlaying || self == .search }
+    var isRequired: Bool { self == .queue || self == .nowPlaying }
+
+    /// Schede spostabili (tutte tranne Coda e In riproduzione) nell'ordine scelto in "Ordina i menù".
+    static func orderedMovable(order: String) -> [MainTab] {
+        let movable = allCases.filter { !$0.isRequired }
+        var result: [MainTab] = []
+        for raw in order.split(separator: ",") {
+            if let t = MainTab(rawValue: String(raw)), movable.contains(t), !result.contains(t) { result.append(t) }
+        }
+        return result + movable.filter { !result.contains($0) }
+    }
 
     static func forGroup(_ kind: GroupKind) -> MainTab {
         switch kind {
@@ -69,16 +79,21 @@ struct RootView: View {
     @State private var moreSheet: MoreSheet?
     @State private var confirmQuit = false
     @State private var tabChanges = 0
+    @AppStorage(Prefs.tabOrder) private var tabOrder = ""
+    @AppStorage(Prefs.tabBarTop) private var tabBarTop = false
+    @AppStorage(Prefs.npBlur) private var npBlur = 3.0
+    @AppStorage(Prefs.menuMain) private var menuMain = "equalizer,sleepTimer,scan,quit"
     @Namespace private var tabIndicator
 
     private var tab: MainTab { MainTab(rawValue: tabRaw) ?? .nowPlaying }
 
     private var visibleTabs: [MainTab] {
-        MainTab.allCases.filter { $0.isRequired || !settings.isTabHidden($0.rawValue) }
+        [.queue, .nowPlaying] + MainTab.orderedMovable(order: tabOrder).filter { !settings.isTabHidden($0.rawValue) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            if tabBarTop { tabBar }
             ZStack {
                 content
                     .id(tab)
@@ -89,7 +104,7 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             SelectionBar()
-            bottomBar
+            if !tabBarTop { tabBar }
         }
         .background {
             ZStack {
@@ -102,6 +117,7 @@ struct RootView: View {
         }
         .overlay(alignment: .top) { scanBanner }
         .overlay { ToastOverlay() }
+        .modifier(TrackActionsHost())
         .sheet(item: $ui.addToPlaylist) { list in
             PlaylistPickerSheet(trackIDs: list.ids)
         }
@@ -115,14 +131,11 @@ struct RootView: View {
             switch which {
             case .equalizer: EqualizerView()
             case .sleepTimer: SleepTimerView()
-            case .settings:
-                NavigationStack {
-                    SettingsView()
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) { Button("Fine") { moreSheet = nil } }
-                        }
-                }
+            case .settings: EmptyView()
             }
+        }
+        .fullScreenCover(isPresented: $ui.showSettings) {
+            SettingsScreen(start: ui.settingsStart)
         }
         .confirmationDialog("Chiudere AuguMusic?", isPresented: $confirmQuit, titleVisibility: .visible) {
             Button("Chiudi app", role: .destructive) {
@@ -145,6 +158,9 @@ struct RootView: View {
         }
         .onChange(of: settings.hiddenTabs) { _, _ in
             if !visibleTabs.contains(tab) { select(.nowPlaying) }
+        }
+        .onChange(of: ui.resetFolderTree) { _, _ in
+            paths[.folders] = NavigationPath()
         }
         .onOpenURL { url in
             if url.host == "nowplaying" { select(.nowPlaying) }
@@ -171,6 +187,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.persist() }
+            if phase == .active, settings.theme == .timeBased { settings.objectWillChange.send() }
         }
     }
 
@@ -247,7 +264,7 @@ struct RootView: View {
 
     // MARK: Barra in basso
 
-    private var bottomBar: some View {
+    private var tabBar: some View {
         HStack(spacing: 0) {
             ForEach(visibleTabs) { t in
                 Button {
@@ -273,15 +290,23 @@ struct RootView: View {
                 }
             }
             Menu {
-                Button { moreSheet = .equalizer } label: { Label("Equalizzatore", systemImage: "slider.vertical.3") }
-                Button { moreSheet = .sleepTimer } label: { Label("Timer di spegnimento", systemImage: "moon.zzz") }
-                Button {
-                    Task { await library.rescan() }
-                    ui.showToast("Scansione della libreria…")
-                } label: { Label("Scansione", systemImage: "arrow.clockwise") }
-                Button { moreSheet = .settings } label: { Label("Impostazioni", systemImage: "gearshape") }
-                Divider()
-                Button(role: .destructive) { confirmQuit = true } label: { Label("Chiudi app", systemImage: "power") }
+                if menuMain.csvContains("equalizer") {
+                    Button { moreSheet = .equalizer } label: { Label("Equalizzatore", systemImage: "slider.vertical.3") }
+                }
+                if menuMain.csvContains("sleepTimer") {
+                    Button { moreSheet = .sleepTimer } label: { Label("Timer di spegnimento", systemImage: "moon.zzz") }
+                }
+                if menuMain.csvContains("scan") {
+                    Button {
+                        Task { await library.rescan() }
+                        ui.showToast("Scansione della libreria…")
+                    } label: { Label("Scansione", systemImage: "arrow.clockwise") }
+                }
+                Button { ui.showSettings = true } label: { Label("Impostazioni", systemImage: "gearshape") }
+                if menuMain.csvContains("quit") {
+                    Divider()
+                    Button(role: .destructive) { confirmQuit = true } label: { Label("Chiudi app", systemImage: "power") }
+                }
             } label: {
                 tabCell(.more, selected: false)
             }
@@ -291,12 +316,12 @@ struct RootView: View {
         // In riproduzione la barra è trasparente (resta il colore della copertina) con un separatore sopra.
         // Grigio chiaro; trasparente solo in riproduzione con un brano che ha la copertina.
         .background(barIsTransparent ? Color.clear : Color(uiColor: .systemGray6))
-        .overlay(alignment: .top) {
+        .overlay(alignment: tabBarTop ? .bottom : .top) {
             if barIsTransparent { Divider() }
         }
     }
 
-    private var barIsTransparent: Bool { tab == .nowPlaying && player.nowPlayingImage != nil }
+    private var barIsTransparent: Bool { tab == .nowPlaying && player.nowPlayingImage != nil && npBlur > 0 }
 
     private func tabCell(_ glyph: AppGlyph, selected: Bool) -> some View {
         VStack(spacing: 0) {
@@ -349,7 +374,8 @@ struct RouteDestination: View {
                                 subtitle: group.subtitle,
                                 tracks: library.tracks(for: group.trackIDs),
                                 headerTrackID: nil,
-                                year: group.year)
+                                year: group.year,
+                                splitBy: kind == .genre ? .artist : (kind == .folder ? nil : .album))
             } else {
                 ContentUnavailableView("Non trovato", systemImage: "questionmark.folder")
             }

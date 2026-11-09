@@ -322,8 +322,18 @@ final class PlayerController: ObservableObject {
         if tickCount % 40 == 0 { persist() }
     }
 
+    /// "Fermati dopo questa canzone": quando finisce questo brano la riproduzione si ferma.
+    @Published var stopAfterTrackID: String?
+
     private func trackFinished() {
         guard let qi = activeQueueIndex else { return }
+        if let stopID = stopAfterTrackID, stopID == loadedTrackID {
+            stopAfterTrackID = nil
+            message = "Fermato dopo il brano scelto"
+            advanceAndStop(qi)
+            persist()
+            return
+        }
         if let timer = sleepTimer {
             switch timer.mode {
             case .afterCurrentSong:
@@ -366,6 +376,7 @@ final class PlayerController: ObservableObject {
         let fade = settings.crossfadeDuration
         guard fade > 0, !audio.isCrossfading, abRepeat.b == nil, duration > fade * 2,
               let qi = activeQueueIndex, duration - t <= fade, duration - t > 0.3 else { return }
+        if stopAfterTrackID != nil, stopAfterTrackID == loadedTrackID { return }
         if let timer = sleepTimer {
             switch timer.mode {
             case .afterCurrentSong: return

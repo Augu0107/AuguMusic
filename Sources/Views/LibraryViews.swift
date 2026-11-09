@@ -4,11 +4,43 @@ import SwiftUI
 
 struct GroupListView: View {
     let kind: GroupKind
+
+    static func menuKey(_ kind: GroupKind) -> String {
+        switch kind {
+        case .folder: Prefs.menuFolder
+        case .album: Prefs.menuAlbum
+        case .genre: Prefs.menuGenre
+        case .artist, .albumArtist, .composer: Prefs.menuArtist
+        }
+    }
+
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerController
     @State private var query = ""
+    @AppStorage(Prefs.foldersSearch) private var foldersSearch = true
+    @AppStorage(Prefs.genresSearch) private var genresSearch = true
+    @AppStorage(Prefs.artistsSearch) private var artistsSearch = true
+
+    private var searchEnabled: Bool {
+        switch kind {
+        case .folder: foldersSearch
+        case .genre: genresSearch
+        default: artistsSearch
+        }
+    }
+
+    @AppStorage(Prefs.foldersHierarchical) private var hierarchical = false
 
     var body: some View {
+        if kind == .folder && hierarchical {
+            FolderTreeView(folderID: nil, path: "")
+        } else {
+            flatList
+        }
+    }
+
+    @ViewBuilder
+    private var flatList: some View {
         let all = library.groups(of: kind)
         let groups = query.isEmpty ? all : all.filter { $0.name.matchesSearch(query) || $0.subtitle.matchesSearch(query) }
         Group {
@@ -21,7 +53,9 @@ struct GroupListView: View {
                     }
                     .listRowSeparator(.hidden)
                     .contextMenu {
-                        TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false)
+                        TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false,
+                                  menuKey: Self.menuKey(kind))
+                        if kind == .folder { FolderExtraActions(group: group) }
                     }
                     .swipeActions(edge: .leading) {
                         Button {
@@ -37,7 +71,7 @@ struct GroupListView: View {
             }
         }
         .navigationTitle(kind.title)
-        .searchable(text: $query, prompt: "Cerca in \(kind.title.lowercased())")
+        .modifier(OptionalSearch(enabled: searchEnabled, query: $query, prompt: "Cerca in \(kind.title.lowercased())"))
         .toolbar {
             if !all.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
@@ -56,6 +90,10 @@ struct GroupListView: View {
 struct GroupRow: View {
     let group: TrackGroup
     @EnvironmentObject private var library: LibraryStore
+    @AppStorage(Prefs.foldersInfo) private var foldersInfo = "duration"
+    @AppStorage(Prefs.albumsInfo) private var albumsInfo = "auto"
+    @AppStorage(Prefs.artistsInfo) private var artistsInfo = "duration"
+    @AppStorage(Prefs.genresInfo) private var genresInfo = "auto"
 
     var body: some View {
         switch group.kind {
@@ -67,7 +105,8 @@ struct GroupRow: View {
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.name).lineLimit(1)
-                    Text("\(group.trackIDs.count) brani · \(group.subtitle)")
+                    Text([GroupInfo.text(group, foldersInfo == "auto" ? "count" : foldersInfo, library: library), group.subtitle]
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -79,21 +118,173 @@ struct GroupRow: View {
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.name).lineLimit(1)
-                    Text(formatTime(group.duration))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    if let info = GroupInfo.text(group, albumsInfo, library: library) {
+                        Text(info)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
         case .artist, .albumArtist, .composer, .genre:
-            // Come Musicolet: solo il nome e la durata totale.
+            // Come Musicolet: il nome e sotto l'informazione scelta (di solito la durata totale).
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.name).lineLimit(1)
-                Text(formatTime(group.duration))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                if let info = GroupInfo.text(group, group.kind == .genre ? genresInfo : artistsInfo, library: library) {
+                    Text(info)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .padding(.vertical, 2)
         }
+    }
+}
+
+/// Testo dell'informazione extra scelta in Impostazioni › Interfaccia (durata, numero di brani...).
+enum GroupInfo {
+    @MainActor
+    static func text(_ group: TrackGroup, _ info: String, library: LibraryStore) -> String? {
+        switch info {
+        case "none":
+            return nil
+        case "count":
+            return group.trackIDs.count == 1 ? "1 brano" : "\(group.trackIDs.count) brani"
+        case "date":
+            let latest = library.tracks(for: group.trackIDs).map(\.modified).max()
+            return latest.map { $0.formatted(date: .abbreviated, time: .omitted) }
+        case "year":
+            return group.year.map { String($0) } ?? ""
+        case "artist", "albumArtist", "composer":
+            let tracks = library.tracks(for: group.trackIDs)
+            let names: [String] = tracks.map { t in
+                info == "artist" ? t.artist : (info == "albumArtist" ? t.albumArtist : t.composer)
+            }
+            return names.first { !$0.isEmpty } ?? ""
+        default: // "duration" e "auto"
+            return formatTime(group.duration)
+        }
+    }
+}
+
+/// Voci per una cartella: rinomina ed escludi dalla scansione.
+struct FolderExtraActions: View {
+    let group: TrackGroup
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var ui: UIState
+    @AppStorage(Prefs.menuFolder) private var enabled = ""
+    @AppStorage(Prefs.excludedFolders) private var excluded = ""
+
+    var body: some View {
+        if enabled.csvContains("rename") {
+            Button { ui.renameFolder = group } label: { Label("Rinomina la cartella", systemImage: "pencil") }
+        }
+        if enabled.csvContains("exclude") {
+            Button(role: .destructive) {
+                excluded = ExcludedFolders.adding(group.id, to: excluded)
+                ui.showToast("Cartella esclusa. La riattivi da Impostazioni.")
+                Task { await library.rescan() }
+            } label: { Label("Escludi questa cartella dalla scansione", systemImage: "folder.badge.minus") }
+        }
+    }
+}
+
+// MARK: - Cartelle gerarchiche
+
+/// "Struttura Menù Cartelle: Gerarchico": cartelle dentro cartelle, con i brani della cartella sotto.
+struct FolderTreeView: View {
+    let folderID: UUID?
+    let path: String
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: PlayerController
+
+    private struct Node: Identifiable {
+        let id: String
+        let name: String
+        let folderID: UUID
+        let path: String
+        let count: Int
+    }
+
+    var body: some View {
+        let groups = library.groups(of: .folder)
+        let roots = Set(groups.compactMap { UUID(uuidString: String($0.id.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")) })
+        if folderID == nil && roots.count == 1, let only = roots.first {
+            FolderTreeView(folderID: only, path: "")
+        } else {
+            let nodes = children(groups: groups, roots: roots)
+            let tracks: [Track] = folderID.map { id in
+                library.group(.folder, id: id.uuidString + "|" + path).map { library.tracks(for: $0.trackIDs) } ?? []
+            } ?? []
+            List {
+                ForEach(nodes) { node in
+                    NavigationLink {
+                        FolderTreeView(folderID: node.folderID, path: node.path)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder.fill")
+                                .font(.title2)
+                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 44, height: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(node.name).lineLimit(1)
+                                Text(node.count == 1 ? "1 brano" : "\(node.count) brani")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                }
+                ForEach(Array(tracks.enumerated()), id: \.offset) { index, track in
+                    TrackListRow(track: track, isCurrent: player.loadedTrackID == track.id, sourceName: title) {
+                        player.play(tracks, startAt: index, source: title)
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .themedBackground()
+            .selectionScope(tracks)
+            .overlay { if groups.isEmpty { LibraryEmptyView() } }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var title: String {
+        guard let folderID else { return "Cartelle" }
+        return path.isEmpty ? library.folderName(folderID) : (path as NSString).lastPathComponent
+    }
+
+    private func children(groups: [TrackGroup], roots: Set<UUID>) -> [Node] {
+        guard let folderID else {
+            return roots.map { id in
+                let count = groups.filter { $0.id.hasPrefix(id.uuidString + "|") }.reduce(0) { $0 + $1.trackIDs.count }
+                return Node(id: id.uuidString, name: library.folderName(id), folderID: id, path: "", count: count)
+            }
+            .sorted { $0.name.localizedLess($1.name) }
+        }
+        let prefix = folderID.uuidString + "|"
+        var counts: [String: Int] = [:]
+        for g in groups where g.id.hasPrefix(prefix) {
+            let dir = String(g.id.dropFirst(prefix.count))
+            let rest: Substring
+            if path.isEmpty {
+                guard !dir.isEmpty else { continue }
+                rest = Substring(dir)
+            } else {
+                guard dir.hasPrefix(path + "/") else { continue }
+                rest = dir.dropFirst(path.count + 1)
+            }
+            guard let first = rest.split(separator: "/").first else { continue }
+            counts[String(first), default: 0] += g.trackIDs.count
+        }
+        return counts.map { name, count in
+            let childPath = path.isEmpty ? name : path + "/" + name
+            return Node(id: childPath, name: name, folderID: folderID, path: childPath, count: count)
+        }
+        .sorted { $0.name.localizedLess($1.name) }
     }
 }
 
@@ -103,6 +294,7 @@ struct ArtistsTabView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerController
     @AppStorage("artistsTabMode") private var modeRaw = GroupKind.artist.rawValue
+    @AppStorage(Prefs.artistsSearch) private var searchEnabled = true
     @State private var showSearch = false
 
     private let modes: [GroupKind] = [.artist, .albumArtist, .composer]
@@ -116,7 +308,8 @@ struct ArtistsTabView: View {
             }
             .listRowSeparator(.hidden)
             .contextMenu {
-                TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false)
+                TrackMenu(tracks: library.tracks(for: group.trackIDs), sourceName: group.name, showNavigation: false,
+                          menuKey: Prefs.menuArtist)
             }
         }
         .listStyle(.plain)
@@ -148,8 +341,10 @@ struct ArtistsTabView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(Color(uiColor: .systemBackground))
-                SearchFieldButton(prompt: "Cerca \(mode == .artist ? "artisti" : mode == .albumArtist ? "artisti album" : "compositori")") {
-                    showSearch = true
+                if searchEnabled {
+                    SearchFieldButton(prompt: "Cerca \(mode == .artist ? "artisti" : mode == .albumArtist ? "artisti album" : "compositori")") {
+                        showSearch = true
+                    }
                 }
             }
         }
@@ -164,17 +359,22 @@ struct ArtistsTabView: View {
 struct AlbumGridView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerController
+    @AppStorage(Prefs.albumsView) private var viewMode = "grid"
+    @AppStorage(Prefs.albumsGridSize) private var gridSize = 2
+    @AppStorage(Prefs.albumsSearch) private var searchEnabled = true
     @State private var showSearch = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
+    private var columns: [GridItem] {
+        let minimum: CGFloat = [90, 120, 150, 200, 260][max(0, min(4, gridSize))]
+        return [GridItem(.adaptive(minimum: minimum, maximum: minimum * 1.45), spacing: 14)]
+    }
 
     var body: some View {
-        let all = library.groups(of: .album)
-        let albums = all
+        let albums = library.groups(of: .album)
         Group {
-            if all.isEmpty {
+            if albums.isEmpty {
                 LibraryEmptyView()
-            } else {
+            } else if viewMode == "grid" {
                 ScrollView {
                     LazyVGrid(columns: columns, alignment: .center, spacing: 14) {
                         ForEach(albums) { album in
@@ -182,22 +382,57 @@ struct AlbumGridView: View {
                                 AlbumCard(album: album)
                             }
                             .buttonStyle(.plain)
-                            .contextMenu {
-                                TrackMenu(tracks: library.tracks(for: album.trackIDs), sourceName: album.name, showNavigation: false)
-                            }
+                            .contextMenu { albumMenu(album) }
                         }
                     }
                     .padding(14)
                 }
                 .themedBackground()
-                .pinnedTop {
-                    SearchFieldButton(prompt: "Cerca album") { showSearch = true }
+            } else {
+                List(albums) { album in
+                    NavigationLink(value: Route.group(.album, album.id)) {
+                        if viewMode == "listArt" {
+                            GroupRow(group: album)
+                        } else {
+                            AlbumPlainRow(album: album)
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                    .contextMenu { albumMenu(album) }
                 }
+                .listStyle(.plain)
+                .themedBackground()
+            }
+        }
+        .pinnedTop {
+            if searchEnabled && !albums.isEmpty {
+                SearchFieldButton(prompt: "Cerca album") { showSearch = true }
             }
         }
         .sheet(isPresented: $showSearch) { GroupSearchSheet(kind: .album) }
         .navigationTitle("Album")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func albumMenu(_ album: TrackGroup) -> some View {
+        TrackMenu(tracks: library.tracks(for: album.trackIDs), sourceName: album.name, showNavigation: false, menuKey: Prefs.menuAlbum)
+    }
+}
+
+/// Riga album senza copertina ("Elenco senza copertine").
+struct AlbumPlainRow: View {
+    let album: TrackGroup
+    @EnvironmentObject private var library: LibraryStore
+    @AppStorage(Prefs.albumsInfo) private var info = "auto"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(album.name).lineLimit(1)
+            if let text = GroupInfo.text(album, info, library: library) {
+                Text(text).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -426,6 +661,8 @@ struct TrackListScreen: View {
     var headerTrackID: String? = nil
     var year: Int? = nil
     var initialSort: TrackSort = .original
+    /// Dividi in sottocategorie: per gli artisti i loro album, per i generi gli artisti.
+    var splitBy: GroupKind? = nil
 
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var library: LibraryStore
@@ -433,9 +670,44 @@ struct TrackListScreen: View {
     @State private var sort: TrackSort?
     @State private var descending = false
     @State private var query = ""
+    @State private var subgroup: String?
+    @AppStorage(Prefs.artistsSplit) private var artistsSplit = true
+    @AppStorage(Prefs.genresSplit) private var genresSplit = true
+    @AppStorage(Prefs.artistsAlbumSort) private var albumSort = "yearDesc"
+
+    private var splitting: Bool {
+        guard let splitBy else { return false }
+        return splitBy == .album ? artistsSplit : genresSplit
+    }
+
+    private func subKey(_ t: Track) -> String {
+        splitBy == .album ? t.displayAlbum : t.displayArtist
+    }
+
+    /// Sottocategorie nell'ordine scelto (album: per nome o per anno).
+    private var subgroups: [String] {
+        var seen = Set<String>()
+        var names: [String] = []
+        var years: [String: Int] = [:]
+        for t in tracks {
+            let k = subKey(t)
+            if seen.insert(k).inserted { names.append(k) }
+            if let y = t.year, y > 0 { years[k] = max(years[k] ?? 0, y) }
+        }
+        if splitBy == .album {
+            switch albumSort {
+            case "name": return names.sorted { $0.localizedLess($1) }
+            case "yearAsc": return names.sorted { (years[$0] ?? 9999, $0) < (years[$1] ?? 9999, $1) }
+            default: return names.sorted { (years[$0] ?? 0, $1) > (years[$1] ?? 0, $0) }
+            }
+        }
+        return names.sorted { $0.localizedLess($1) }
+    }
 
     private var displayed: [Track] {
-        var list = (sort ?? initialSort).apply(tracks)
+        var base = tracks
+        if splitting, let subgroup { base = base.filter { subKey($0) == subgroup } }
+        var list = (sort ?? initialSort).apply(base)
         if descending { list.reverse() }
         if !query.isEmpty {
             list = list.filter {
@@ -484,6 +756,25 @@ struct TrackListScreen: View {
             .listRowSeparator(.hidden)
             .disabled(list.isEmpty)
 
+            if splitting && query.isEmpty {
+                let subs = subgroups
+                if subs.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            SubgroupTile(title: splitBy == .album ? "Tutti gli album" : "Tutti gli artisti",
+                                         selected: subgroup == nil, dimmed: subgroup != nil) { subgroup = nil }
+                            ForEach(subs, id: \.self) { name in
+                                SubgroupTile(title: name, selected: subgroup == name, dimmed: subgroup != nil && subgroup != name) {
+                                    subgroup = name
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .listRowSeparator(.hidden)
+                }
+            }
+
             ForEach(Array(list.enumerated()), id: \.offset) { index, track in
                 TrackListRow(track: track,
                              isCurrent: player.loadedTrackID == track.id,
@@ -522,6 +813,33 @@ struct TrackListScreen: View {
                 }
             }
         }
+    }
+}
+
+/// Riquadro di una sottocategoria (come le tessere dell'album).
+struct SubgroupTile: View {
+    let title: String
+    let selected: Bool
+    let dimmed: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Rectangle().fill(Color.accentColor).frame(height: 2)
+            }
+            .padding(10)
+            .frame(width: 150, height: 70, alignment: .topLeading)
+            .background(Color(uiColor: .systemBackground))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.accentColor : Color(uiColor: .systemGray4), lineWidth: selected ? 1.5 : 1))
+            .opacity(dimmed ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
     }
 }
 

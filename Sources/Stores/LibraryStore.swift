@@ -159,8 +159,12 @@ final class LibraryStore: ObservableObject {
 
         let roots: [(UUID, URL)] = folders.compactMap { f in folderURLs[f.id].map { (f.id, $0) } }
         let unreachable = Set(folders.map(\.id)).subtracting(roots.map { $0.0 })
+        let excludedStored = Prefs.string(Prefs.excludedFolders)
         let entries = await Task.detached(priority: .userInitiated) {
-            LibraryScanner.listFiles(roots: roots)
+            LibraryScanner.listFiles(roots: roots).filter { entry in
+                let dir = (entry.relativePath as NSString).deletingLastPathComponent
+                return !ExcludedFolders.isExcluded(entry.folderID.uuidString + "|" + dir, stored: excludedStored)
+            }
         }.value
 
         let old = byID
@@ -340,6 +344,14 @@ final class LibraryStore: ObservableObject {
     func albumID(for t: Track) -> String? { trackAlbumKey[t.id] }
     func artistID(for name: String) -> String { name.lowercased() }
     func folderID(for t: Track) -> String { Self.folderKey(t) }
+
+    /// Indirizzo della cartella di un gruppo "Cartelle" ("uuid|percorso").
+    func directoryURL(folderKey: String) -> URL? {
+        let parts = folderKey.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = parts.first, let uuid = UUID(uuidString: String(first)), let root = folderURLs[uuid] else { return nil }
+        let dir = parts.count > 1 ? String(parts[1]) : ""
+        return dir.isEmpty ? root : root.appendingPathComponent(dir, isDirectory: true)
+    }
 }
 
 enum LibraryScanner {

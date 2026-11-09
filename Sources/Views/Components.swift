@@ -318,6 +318,8 @@ struct TrackMenu: View {
     var showNavigation = true
     /// Usato dal pannello di selezione: dopo l'azione la selezione si chiude.
     var clearsSelection = false
+    /// Preferenza con le voci extra da mostrare (Opzioni e menù); nil = scelta automatica.
+    var menuKey: String? = nil
 
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var userData: UserDataStore
@@ -397,6 +399,10 @@ struct TrackMenu: View {
                 Label("Aggiungi ai preferiti", systemImage: "heart")
             }
         }
+        Divider()
+        TrackExtraActions(tracks: tracks,
+                          menuKey: menuKey ?? (tracks.count == 1 ? Prefs.menuTrack : Prefs.menuMulti),
+                          clearsSelection: clearsSelection)
     }
 
     private func done() {

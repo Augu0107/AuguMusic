@@ -9,6 +9,7 @@ struct AuguMusicApp: App {
     @StateObject private var ui: UIState
 
     init() {
+        Prefs.register()
         let settings = AppSettings()
         let library = LibraryStore(settings: settings)
         let userData = UserDataStore()
