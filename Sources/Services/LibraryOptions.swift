@@ -18,6 +18,10 @@ struct LibraryOptions: Sendable, Equatable {
     var sepComposer: [String]
     var sepGenre: [String]
     var hideExtraAll: Bool
+    var showFileName: Bool
+    var ignoreWords: [String]
+    var ignoreWordsTags: Set<String>
+    var naturalSortTags: Set<String>
 
     static func current() -> LibraryOptions {
         func seps(_ key: String) -> [String] {
@@ -39,11 +43,48 @@ struct LibraryOptions: Sendable, Equatable {
             sepAlbumArtist: seps(Prefs.sepAlbumArtist),
             sepComposer: seps(Prefs.sepComposer),
             sepGenre: seps(Prefs.sepGenre),
-            hideExtraAll: Prefs.bool(Prefs.hideExtraAll)
+            hideExtraAll: Prefs.bool(Prefs.hideExtraAll),
+            showFileName: Prefs.bool(Prefs.showFileName),
+            ignoreWords: Prefs.string(Prefs.ignoreWords).split(separator: " ").map { $0.lowercased() },
+            ignoreWordsTags: Prefs.string(Prefs.ignoreWordsTags).csvItems,
+            naturalSortTags: Prefs.string(Prefs.naturalSortTags).csvItems
         )
     }
 
     static let videoExtensions: Set<String> = ["mp4", "m4v", "mov", "3gp", "3gpp", "mkv", "webm", "avi"]
+}
+
+// MARK: - Ordinamento (parole iniziali da ignorare, ordinamento alfanumerico)
+
+enum SortText {
+    nonisolated(unsafe) static var ignoreWords: [String] = []
+    nonisolated(unsafe) static var ignoreTags: Set<String> = []
+    nonisolated(unsafe) static var naturalTags: Set<String> = []
+    nonisolated(unsafe) static var showFileName = false
+
+    static func update(_ o: LibraryOptions) {
+        ignoreWords = o.ignoreWords
+        ignoreTags = o.ignoreWordsTags
+        naturalTags = o.naturalSortTags
+        showFileName = o.showFileName
+    }
+
+    /// Toglie "The ", "A "... all'inizio se il tag lo prevede.
+    static func key(_ s: String, tag: String) -> String {
+        guard ignoreTags.contains(tag), !ignoreWords.isEmpty else { return s }
+        let lower = s.lowercased()
+        for w in ignoreWords where lower.hasPrefix(w + " ") && s.count > w.count + 1 {
+            return String(s.dropFirst(w.count + 1))
+        }
+        return s
+    }
+
+    /// Confronto per l'ordinamento: "Brano 2" prima di "Brano 10" solo se è attivo l'ordinamento alfanumerico.
+    static func less(_ a: String, _ b: String, tag: String) -> Bool {
+        let ka = key(a, tag: tag), kb = key(b, tag: tag)
+        if naturalTags.contains(tag) { return ka.localizedStandardCompare(kb) == .orderedAscending }
+        return ka.localizedCaseInsensitiveCompare(kb) == .orderedAscending
+    }
 }
 
 // MARK: - Nascondi contenuti extra dai tag

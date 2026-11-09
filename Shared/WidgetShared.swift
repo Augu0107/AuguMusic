@@ -166,7 +166,7 @@ struct WidgetRewindIntent: AudioPlaybackIntent {
     init() {}
     func perform() async throws -> some IntentResult {
         #if MAIN_APP
-        await MainActor.run { PlayerController.shared?.skip(by: -10) }
+        await MainActor.run { PlayerController.shared?.seekBackward() }
         #endif
         return .result()
     }
@@ -177,7 +177,7 @@ struct WidgetForwardIntent: AudioPlaybackIntent {
     init() {}
     func perform() async throws -> some IntentResult {
         #if MAIN_APP
-        await MainActor.run { PlayerController.shared?.skip(by: 10) }
+        await MainActor.run { PlayerController.shared?.seekForward() }
         #endif
         return .result()
     }

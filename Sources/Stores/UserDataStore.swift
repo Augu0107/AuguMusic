@@ -47,6 +47,7 @@ final class UserDataStore: ObservableObject {
         stat.count += 1
         stat.lastPlayed = Date()
         stats[id] = stat
+        PlayHistory.append(id)
     }
 
     func playCount(_ id: String) -> Int { stats[id]?.count ?? 0 }

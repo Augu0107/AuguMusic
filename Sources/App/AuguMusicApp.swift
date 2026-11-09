@@ -41,6 +41,8 @@ struct AuguMusicApp: App {
                 .task {
                     await library.autoScanIfEnabled()
                     player.libraryDidChange()
+                    if Prefs.bool(Prefs.autoplayOnLaunch) && !player.isPlaying { player.play() }
+                    PlayCountExporter.exportIfNeeded(library: library, userData: userData)
                 }
         }
     }

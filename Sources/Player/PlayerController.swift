@@ -191,7 +191,25 @@ final class PlayerController: ObservableObject {
         try? session.setActive(true)
     }
 
-    private func loadCurrent(autoplay: Bool, at time: Double = 0) {
+    /// "Ricorda l'ultima posizione di tutti i brani".
+    private func rememberCurrentPosition() {
+        guard Prefs.bool(Prefs.rememberPosition), let id = loadedTrackID else { return }
+        var positions = UserDefaults.standard.dictionary(forKey: "trackPositions") as? [String: Double] ?? [:]
+        let t = audio.currentTime
+        positions[id] = (t > 5 && t < duration - 5) ? t : nil
+        if positions.count > 3000 { positions.removeAll() }
+        UserDefaults.standard.set(positions, forKey: "trackPositions")
+    }
+
+    private func savedPosition(_ id: String) -> Double {
+        guard Prefs.bool(Prefs.rememberPosition) else { return 0 }
+        return (UserDefaults.standard.dictionary(forKey: "trackPositions") as? [String: Double])?[id] ?? 0
+    }
+
+    private func loadCurrent(autoplay: Bool, at requestedTime: Double = 0) {
+        rememberCurrentPosition()
+        var time = requestedTime
+        if time == 0, let qi = activeQueueIndex, let id = queues[qi].currentID { time = savedPosition(id) }
         guard let qi = activeQueueIndex, let id = queues[qi].currentID else {
             audio.unload()
             loadedTrackID = nil
@@ -333,7 +351,8 @@ final class PlayerController: ObservableObject {
 
     func previous() {
         guard let qi = activeQueueIndex, !queues[qi].items.isEmpty else { return }
-        if audio.currentTime > 3 {
+        // "Funzionamento pulsante Brano precedente": sempre il precedente, oppure dopo 10 s ricomincia.
+        if Prefs.string(Prefs.prevBehavior) == "restart10" && audio.currentTime > 10 {
             seek(to: 0)
             return
         }
@@ -365,7 +384,8 @@ final class PlayerController: ObservableObject {
         clock.time = t
         // Conta un ascolto dopo metà brano (al massimo 30 secondi), come le statistiche di Musicolet.
         listenedSeconds += 0.25 * effectiveSpeed
-        if !playCounted, let id = loadedTrackID, listenedSeconds >= min(30, max(5, duration * 0.5)) {
+        let percent = Double(max(1, Prefs.int(Prefs.playCountPercent))) / 100
+        if !playCounted, let id = loadedTrackID, listenedSeconds >= max(3, duration * percent) {
             playCounted = true
             UserDataStore.shared?.recordPlay(id)
         }
@@ -527,7 +547,20 @@ final class PlayerController: ObservableObject {
         let ids = tracks.map(\.id)
         let start = max(0, min(index, ids.count - 1))
         saveElapsed()
-        if forceNewQueue || settings.tapAction == .newQueue || activeQueueIndex == nil {
+        if (forceNewQueue || settings.tapAction == .newQueue), let existing = queues.firstIndex(where: { $0.name == source }) {
+            // "Quando esiste già una coda con lo stesso nome della sorgente": sostituisci o unisci.
+            if Prefs.string(Prefs.sameNameQueue) == "merge" {
+                let missing = ids.filter { !queues[existing].items.contains($0) }
+                queues[existing].items.append(contentsOf: missing)
+                queues[existing].index = queues[existing].items.firstIndex(of: ids[start]) ?? 0
+            } else {
+                queues[existing].items = ids
+                queues[existing].unshuffled = nil
+                queues[existing].index = start
+            }
+            queues[existing].elapsed = 0
+            activeQueueID = queues[existing].id
+        } else if forceNewQueue || settings.tapAction == .newQueue || activeQueueIndex == nil {
             let q = PlayQueue(name: source, items: ids, index: start)
             queues.append(q)
             activeQueueID = q.id
@@ -660,7 +693,7 @@ final class PlayerController: ObservableObject {
 
     func toggleShuffle() {
         guard let qi = activeQueueIndex else { return }
-        queues[qi].setShuffle(!queues[qi].isShuffled)
+        queues[qi].setShuffle(!queues[qi].isShuffled, onlyAfterCurrent: Prefs.string(Prefs.shuffleMode) == "after")
         message = queues[qi].isShuffled ? "Modalità casuale attiva" : "Modalità casuale disattivata"
         persist()
     }
@@ -670,6 +703,22 @@ final class PlayerController: ObservableObject {
         queues[qi].reshuffle()
         persist()
     }
+
+    /// "Random" come ordinamento della coda: mescola tutti i brani o solo quelli dopo il brano attuale.
+    func randomizeQueue() {
+        guard let qi = activeQueueIndex, !queues[qi].items.isEmpty else { return }
+        queues[qi].randomize(onlyAfterCurrent: Prefs.string(Prefs.randomSortMode) == "after")
+        message = "Coda in ordine casuale"
+        persist()
+    }
+
+    // MARK: Avanti veloce / Riavvolgi
+
+    var seekForwardSeconds: Double { Double(max(1, Prefs.int(Prefs.seekForwardSeconds))) }
+    var seekBackSeconds: Double { Double(max(1, Prefs.int(Prefs.seekBackSeconds))) }
+
+    func seekForward() { skip(by: seekForwardSeconds) }
+    func seekBackward() { skip(by: -seekBackSeconds) }
 
     // MARK: Timer e A-B
 
@@ -895,14 +944,46 @@ final class PlayerController: ObservableObject {
             }
             return .success
         }
+        // "Successivo/Precedente come Avanti veloce/Riavvolgi" vale per i comandi da fuori dall'app.
         _ = c.nextTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.next() }
+            MainActor.assumeIsolated {
+                if Prefs.bool(Prefs.nextPrevAsSeek) { self?.seekForward() } else { self?.next() }
+            }
             return .success
         }
         _ = c.previousTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.previous() }
+            MainActor.assumeIsolated {
+                if Prefs.bool(Prefs.nextPrevAsSeek) { self?.seekBackward() } else { self?.previous() }
+            }
             return .success
         }
+        // "Controllo esterno avanzato": ripetizione, casuale e preferito da schermata di blocco/accessori.
+        _ = c.changeRepeatModeCommand.addTarget { [weak self] event in
+            guard Prefs.bool(Prefs.externalControl), let e = event as? MPChangeRepeatModeCommandEvent else { return .commandFailed }
+            MainActor.assumeIsolated {
+                switch e.repeatType {
+                case .one: self?.repeatMode = .repeatSong
+                case .all: self?.repeatMode = .repeatQueue
+                default: self?.repeatMode = .stopAfterQueue
+                }
+            }
+            return .success
+        }
+        _ = c.changeShuffleModeCommand.addTarget { [weak self] event in
+            guard Prefs.bool(Prefs.externalControl), let e = event as? MPChangeShuffleModeCommandEvent else { return .commandFailed }
+            MainActor.assumeIsolated {
+                guard let self, let qi = self.activeQueueIndex else { return }
+                let on = e.shuffleType != .off
+                if self.queues[qi].isShuffled != on { self.toggleShuffle() }
+            }
+            return .success
+        }
+        _ = c.likeCommand.addTarget { [weak self] _ in
+            guard Prefs.bool(Prefs.externalControl) else { return .commandFailed }
+            MainActor.assumeIsolated { self?.toggleCurrentFavorite() }
+            return .success
+        }
+        c.likeCommand.localizedTitle = "Preferito"
         _ = c.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = e.positionTime

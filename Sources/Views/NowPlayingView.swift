@@ -30,6 +30,7 @@ struct NowPlayingView: View {
     @State private var sheet: NowPlayingSheet?
     @State private var artistChoices: [String] = []
     @State private var showFullArtwork = false
+    @State private var pendingSearch: (query: String, images: Bool)?
 
     @AppStorage(Prefs.npSwipe) private var swipeTracks = true
     @AppStorage(Prefs.lyricsKeepAwake) private var lyricsAwake = true
@@ -96,6 +97,17 @@ struct NowPlayingView: View {
                 }
             }
         }
+        .confirmationDialog("Cerca con…",
+                            isPresented: Binding(get: { pendingSearch != nil }, set: { if !$0 { pendingSearch = nil } }),
+                            titleVisibility: .visible) {
+            ForEach(OnlineSearch.engines.indices, id: \.self) { i in
+                let engine = OnlineSearch.engines[i]
+                Button(engine.name) {
+                    if let s = pendingSearch { OnlineSearch.open(engine: engine.id, query: s.query, images: s.images) }
+                    pendingSearch = nil
+                }
+            }
+        }
         .fullScreenCover(isPresented: $showFullArtwork) {
             FullArtworkView(image: player.nowPlayingImage) { showFullArtwork = false }
         }
@@ -106,6 +118,16 @@ struct NowPlayingView: View {
         .onChange(of: showLyricsInline) { _, _ in updateIdleTimer() }
         .onChange(of: settings.keepScreenOn) { _, _ in updateIdleTimer() }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    /// "Motore di ricerca predefinito": apre la ricerca, oppure chiede quale motore usare.
+    private func searchOnline(_ query: String, images: Bool) {
+        let engine = Prefs.string(Prefs.searchEngine)
+        if engine == "ask" {
+            pendingSearch = (query, images)
+        } else {
+            OnlineSearch.open(engine: engine, query: query, images: images)
+        }
     }
 
     private func updateIdleTimer() {
@@ -177,7 +199,7 @@ struct NowPlayingView: View {
                 }
             }
             Spacer()
-            if menuItems.csvContains("cast") {
+            if menuItems.csvContains("cast") && Prefs.bool(Prefs.castEnabled) {
                 AirPlayButton().frame(width: 40, height: 40)
             }
             moreMenu
@@ -216,6 +238,14 @@ struct NowPlayingView: View {
                 Button { ui.navigate(.group(.folder, library.folderID(for: t))) } label: {
                     Label("Vai alla cartella", systemImage: "folder")
                 }
+                Menu {
+                    Button { searchOnline(OnlineSearch.query(Prefs.string(Prefs.artQuery), track: t), images: true) } label: {
+                        Label("Cerca la copertina", systemImage: "photo")
+                    }
+                    Button { searchOnline(OnlineSearch.query(Prefs.string(Prefs.lyricsQuery), track: t), images: false) } label: {
+                        Label("Cerca il testo", systemImage: "quote.bubble")
+                    }
+                } label: { Label("Cerca online", systemImage: "globe") }
                 Divider()
                 if menuItems.csvContains("speed") {
                     Button { sheet = .playback } label: { Label("Velocità di riproduzione e Tono", systemImage: "speedometer") }
@@ -373,8 +403,8 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             if showSeekButtons {
-                Button { player.skip(by: -10) } label: {
-                    Image(systemName: "gobackward.10").font(.title3).frame(maxWidth: .infinity, minHeight: 44)
+                Button { player.seekBackward() } label: {
+                    Image(systemName: "gobackward").font(.title3).frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
             HoldToSeekButton(tap: { player.previous() }, step: -5) {
@@ -388,8 +418,8 @@ struct NowPlayingView: View {
                 TransportIcon(glyph: .next, size: 26).frame(maxWidth: .infinity, minHeight: 56)
             }
             if showSeekButtons {
-                Button { player.skip(by: 10) } label: {
-                    Image(systemName: "goforward.10").font(.title3).frame(maxWidth: .infinity, minHeight: 44)
+                Button { player.seekForward() } label: {
+                    Image(systemName: "goforward").font(.title3).frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
             Button { player.toggleShuffle() } label: {

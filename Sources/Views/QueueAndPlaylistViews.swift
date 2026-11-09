@@ -358,6 +358,7 @@ struct QueueTabView: View {
                         }
                     }
                     Divider()
+                    Button { player.randomizeQueue() } label: { Label("Ordina: Random", systemImage: "shuffle") }
                     Button { showAllQueues = true } label: { Label("Gestisci le code…", systemImage: "list.number") }
                     if removeOthers && player.queues.count > 1 {
                         Button(role: .destructive) {

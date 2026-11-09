@@ -32,7 +32,10 @@ struct Track: Codable, Identifiable, Hashable {
     var fileExtension: String { (relativePath as NSString).pathExtension.lowercased() }
     var directory: String { (relativePath as NSString).deletingLastPathComponent }
 
-    var displayTitle: String { title.isEmpty ? (fileName as NSString).deletingPathExtension : TagCleaner.everywhere(title) }
+    var displayTitle: String {
+        if title.isEmpty || SortText.showFileName { return (fileName as NSString).deletingPathExtension }
+        return TagCleaner.everywhere(title)
+    }
     var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : TagCleaner.everywhere(artist) }
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : TagCleaner.everywhere(album) }
     var displayAlbumArtist: String { albumArtist.isEmpty ? displayArtist : TagCleaner.everywhere(albumArtist) }
@@ -224,11 +227,11 @@ struct PlayQueue: Codable, Identifiable, Equatable {
         if let i = tagged.firstIndex(where: { $0.offset == index }) { index = i }
     }
 
-    mutating func setShuffle(_ on: Bool) {
+    mutating func setShuffle(_ on: Bool, onlyAfterCurrent: Bool = false) {
         if on {
             guard unshuffled == nil else { return }
             unshuffled = items
-            shuffleKeepingCurrent()
+            if onlyAfterCurrent { shuffleAfterCurrent() } else { shuffleKeepingCurrent() }
         } else {
             guard let original = unshuffled else { return }
             let current = currentID
@@ -252,6 +255,19 @@ struct PlayQueue: Codable, Identifiable, Equatable {
     mutating func reshuffle() {
         guard isShuffled else { return }
         shuffleKeepingCurrent()
+    }
+
+    /// Mescola solo i brani dopo quello in riproduzione (quelli prima restano dove sono).
+    private mutating func shuffleAfterCurrent() {
+        guard index + 1 < items.count else { return }
+        let head = Array(items[...index])
+        items = head + items[(index + 1)...].shuffled()
+    }
+
+    /// Ordine casuale permanente (non si può "togliere" come la modalità casuale).
+    mutating func randomize(onlyAfterCurrent: Bool) {
+        unshuffled = nil
+        if onlyAfterCurrent { shuffleAfterCurrent() } else { shuffleKeepingCurrent() }
     }
 
     private mutating func shuffleKeepingCurrent() {

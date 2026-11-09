@@ -104,6 +104,34 @@ enum Prefs {
     static let preventAutoplay = "hp.preventAutoplay"
     static let strictAutoplay = "hp.strictAutoplay"
 
+    // Avanzati
+    static let showFileName = "adv.showFileName"
+    static let nextPrevAsSeek = "adv.nextPrevAsSeek"
+    static let rememberPosition = "adv.rememberPosition"
+    static let playCountPercent = "adv.playCountPercent"
+    static let prevBehavior = "adv.prevBehavior"
+    static let confirmQuit = "adv.confirmQuit"
+    static let shuffleMode = "adv.shuffleMode"
+    static let randomSortMode = "adv.randomSortMode"
+    static let sameNameQueue = "adv.sameNameQueue"
+    static let autoplayOnLaunch = "adv.autoplayOnLaunch"
+    static let castEnabled = "adv.castEnabled"
+    static let csvExport = "adv.csvExport"
+    static let loadArtwork = "adv.loadArtwork"
+    static let externalControl = "adv.externalControl"
+    static let seekForwardSeconds = "adv.seekForward"
+    static let seekBackSeconds = "adv.seekBack"
+    static let searchEngine = "adv.searchEngine"
+    static let artQuery = "adv.artQuery"
+    static let lyricsQuery = "adv.lyricsQuery"
+    static let ignoreWords = "adv.ignoreWords"
+    static let ignoreWordsTags = "adv.ignoreWordsTags"
+    static let naturalSortTags = "adv.naturalSortTags"
+    static let shuffleSortPrefix = "adv.shuffleSort."
+    static let lastCSVWeek = "adv.lastCSVWeek"
+    static let lastCSVMonth = "adv.lastCSVMonth"
+    static let lastCSVYear = "adv.lastCSVYear"
+
     static let defaultSeparators = ", ; / | & ft. feat."
 
     static let defaults: [String: Any] = [
@@ -183,6 +211,28 @@ enum Prefs {
         resumeWired: false,
         preventAutoplay: true,
         strictAutoplay: true,
+        showFileName: false,
+        nextPrevAsSeek: false,
+        rememberPosition: false,
+        playCountPercent: 30,
+        prevBehavior: "always",
+        confirmQuit: true,
+        shuffleMode: "all",
+        randomSortMode: "all",
+        sameNameQueue: "replace",
+        autoplayOnLaunch: false,
+        castEnabled: true,
+        csvExport: false,
+        loadArtwork: true,
+        externalControl: true,
+        seekForwardSeconds: 10,
+        seekBackSeconds: 10,
+        searchEngine: "google",
+        artQuery: "<ar> <t>",
+        lyricsQuery: "lyrics <t> <al>",
+        ignoreWords: "A An The",
+        ignoreWordsTags: "",
+        naturalSortTags: "",
     ]
 
     static func register() {

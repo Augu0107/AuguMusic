@@ -535,6 +535,7 @@ struct NumberInputDialog: View {
     var message: String? = nil
     let value: Double
     let range: ClosedRange<Double>
+    var decimals = 1
     let done: (Double?) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -564,7 +565,7 @@ struct NumberInputDialog: View {
         }
         .padding(26)
         .onAppear {
-            text = String(format: "%.1f", value)
+            text = String(format: "%.\(decimals)f", value)
             focused = true
         }
     }

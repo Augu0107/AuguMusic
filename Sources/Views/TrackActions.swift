@@ -115,26 +115,89 @@ struct TrackExtraActions: View {
 // MARK: - Shuffle avanzato
 
 enum AdvancedShuffle: String, CaseIterable, Identifiable {
-    case songs, albums, artists, folders
+    case songs, albums, artists, albumArtists, composers, genres, folders
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .songs: "Mescola i brani"
-        case .albums: "Mescola gli album (brani in ordine)"
-        case .artists: "Mescola gli artisti"
-        case .folders: "Mescola le cartelle"
+        case .albums: "Shuffle Album"
+        case .artists: "Shuffle Artisti"
+        case .albumArtists: "Shuffle Artisti album"
+        case .composers: "Shuffle Compositori"
+        case .genres: "Shuffle Generi"
+        case .folders: "Shuffle Cartelle"
         }
     }
 
-    /// Mescola i gruppi tenendo i brani di ogni gruppo nell'ordine originale.
+    /// Ordine dei brani dentro ogni gruppo (Impostazioni › Avanzati › Shuffle avanzato).
+    static let sortOptions: [ChoiceOption] = [
+        ChoiceOption(id: "default", label: "Predefinito (disco e numero traccia)"),
+        ChoiceOption(id: "yearAsc", label: "Anno - crescente"),
+        ChoiceOption(id: "yearDesc", label: "Anno - decrescente"),
+        ChoiceOption(id: "modAsc", label: "Data di modifica - crescente"),
+        ChoiceOption(id: "modDesc", label: "Data di modifica - decrescente"),
+        ChoiceOption(id: "addedAsc", label: "Data di inserimento - crescente"),
+        ChoiceOption(id: "addedDesc", label: "Data di inserimento - decrescente"),
+        ChoiceOption(id: "lastAsc", label: "Data ultima riproduzione - crescente"),
+        ChoiceOption(id: "lastDesc", label: "Data ultima riproduzione - decrescente"),
+        ChoiceOption(id: "mostPlayed", label: "Più riprodotti prima"),
+        ChoiceOption(id: "leastPlayed", label: "Meno riprodotti prima"),
+        ChoiceOption(id: "random", label: "Random"),
+        ChoiceOption(id: "titleAZ", label: "Titoli A-Z"),
+        ChoiceOption(id: "titleZA", label: "Titoli Z-A"),
+        ChoiceOption(id: "fileAZ", label: "Nome file A-Z"),
+        ChoiceOption(id: "fileZA", label: "Nome file Z-A"),
+        ChoiceOption(id: "pathAsc", label: "Indirizzo file - crescente"),
+        ChoiceOption(id: "pathDesc", label: "Indirizzo file - decrescente"),
+        ChoiceOption(id: "albumAZ", label: "Album A-Z"),
+        ChoiceOption(id: "albumZA", label: "Album Z-A"),
+        ChoiceOption(id: "artistAZ", label: "Artisti A-Z"),
+        ChoiceOption(id: "artistZA", label: "Artisti Z-A"),
+    ]
+
+    var sortKey: String { Prefs.shuffleSortPrefix + rawValue }
+
+    @MainActor
+    static func sortWithinGroup(_ tracks: [Track], option: String, userData: UserDataStore?) -> [Track] {
+        func stat(_ t: Track) -> PlayStat? { userData?.stats[t.id] }
+        switch option {
+        case "yearAsc": return tracks.sorted { ($0.year ?? 0, $0.trackNumber ?? 0) < ($1.year ?? 0, $1.trackNumber ?? 0) }
+        case "yearDesc": return tracks.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+        case "modAsc": return tracks.sorted { $0.modified < $1.modified }
+        case "modDesc": return tracks.sorted { $0.modified > $1.modified }
+        case "addedAsc": return tracks.sorted { $0.dateAdded < $1.dateAdded }
+        case "addedDesc": return tracks.sorted { $0.dateAdded > $1.dateAdded }
+        case "lastAsc": return tracks.sorted { (stat($0)?.lastPlayed ?? .distantPast) < (stat($1)?.lastPlayed ?? .distantPast) }
+        case "lastDesc": return tracks.sorted { (stat($0)?.lastPlayed ?? .distantPast) > (stat($1)?.lastPlayed ?? .distantPast) }
+        case "mostPlayed": return tracks.sorted { (stat($0)?.count ?? 0) > (stat($1)?.count ?? 0) }
+        case "leastPlayed": return tracks.sorted { (stat($0)?.count ?? 0) < (stat($1)?.count ?? 0) }
+        case "random": return tracks.shuffled()
+        case "titleAZ": return tracks.sorted { SortText.less($0.displayTitle, $1.displayTitle, tag: "title") }
+        case "titleZA": return tracks.sorted { SortText.less($1.displayTitle, $0.displayTitle, tag: "title") }
+        case "fileAZ": return tracks.sorted { SortText.less($0.fileName, $1.fileName, tag: "fileName") }
+        case "fileZA": return tracks.sorted { SortText.less($1.fileName, $0.fileName, tag: "fileName") }
+        case "pathAsc": return tracks.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+        case "pathDesc": return tracks.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedDescending }
+        case "albumAZ": return tracks.sorted { $0.album == $1.album ? LibraryStore.albumOrder($0, $1) : SortText.less($0.displayAlbum, $1.displayAlbum, tag: "album") }
+        case "albumZA": return tracks.sorted { $0.album == $1.album ? LibraryStore.albumOrder($0, $1) : SortText.less($1.displayAlbum, $0.displayAlbum, tag: "album") }
+        case "artistAZ": return tracks.sorted { SortText.less($0.displayArtist, $1.displayArtist, tag: "artist") }
+        case "artistZA": return tracks.sorted { SortText.less($1.displayArtist, $0.displayArtist, tag: "artist") }
+        default: return tracks.sorted { $0.album == $1.album ? LibraryStore.albumOrder($0, $1) : $0.album < $1.album }
+        }
+    }
+
+    /// Mescola i gruppi; dentro ogni gruppo i brani seguono l'ordine scelto nelle impostazioni.
     @MainActor
     static func order(_ tracks: [Track], by mode: AdvancedShuffle, library: LibraryStore) -> [Track] {
         let key: (Track) -> String
         switch mode {
         case .songs: return tracks.shuffled()
         case .albums: key = { library.albumID(for: $0) ?? $0.album }
-        case .artists: key = { $0.artist.lowercased() }
+        case .artists: key = { library.artistNames(for: $0).first?.lowercased() ?? "" }
+        case .albumArtists: key = { library.albumArtistNames(for: $0).first?.lowercased() ?? "" }
+        case .composers: key = { library.composerNames(for: $0).first?.lowercased() ?? "" }
+        case .genres: key = { library.genreNames(for: $0).first?.lowercased() ?? "" }
         case .folders: key = { library.folderID(for: $0) }
         }
         var order: [String] = []
@@ -144,7 +207,8 @@ enum AdvancedShuffle: String, CaseIterable, Identifiable {
             if groups[k] == nil { order.append(k) }
             groups[k, default: []].append(t)
         }
-        return order.shuffled().flatMap { groups[$0] ?? [] }
+        let option = UserDefaults.standard.string(forKey: mode.sortKey) ?? "default"
+        return order.shuffled().flatMap { sortWithinGroup(groups[$0] ?? [], option: option, userData: UserDataStore.shared) }
     }
 }
 

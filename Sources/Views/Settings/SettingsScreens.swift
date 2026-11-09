@@ -16,6 +16,10 @@ struct SettingsScreen: View {
                     case .library: LibrarySettingsPage()
                     case .headset: HeadsetSettingsPage()
                     case .widget: WidgetSettingsPage()
+                    case .advanced: AdvancedSettingsPage()
+                    case .csvExport: CSVExportPage()
+                    case .advancedShuffle: AdvancedShufflePage()
+                    case .ignoreWords: IgnoreWordsPage()
                     case .preventAutoplay: PreventAutoplayPage()
                     case .scanFolders: ScanFoldersPage()
                     case .excludedFolders: ExcludedFoldersPage()
@@ -58,6 +62,7 @@ struct SettingsRootPage: View {
                     SettingsRow(title: "Libreria brani e tag", systemIcon: "music.note.list") { nav.path = [.library] }
                     SettingsRow(title: "Auricolare, Bluetooth e altoparlanti", systemIcon: "headphones") { nav.path = [.headset] }
                     SettingsRow(title: "Widget HomeScreen", systemIcon: "square.grid.2x2.fill") { nav.path = [.widget] }
+                    SettingsRow(title: "Avanzati", systemIcon: "gearshape.2.fill") { nav.path = [.advanced] }
                 }
                 .listRowInsets(EdgeInsets())
 
@@ -898,6 +903,28 @@ struct SettingsEntry: Identifiable {
             e("Azione a doppia pressione del pulsante dell'auricolare", .headset),
             e("Azione a tripla pressione del pulsante dell'auricolare", .headset),
             e("Widget HomeScreen", .widget),
+            e("Mostra il nome del file invece del titolo", .advanced),
+            e("Successivo e Precedente come Avanti veloce e Riavvolgi", .advanced),
+            e("Ricorda l'ultima posizione di tutti i brani", .advanced),
+            e("Durata minima per considerarla una riproduzione", .advanced),
+            e("Funzionamento pulsante Brano precedente", .advanced),
+            e("Conferma prima di chiudere l'app", .advanced),
+            e("Quando attivo la 'Modalità Shuffle'", .advanced),
+            e("Quando seleziono 'Random' come ordinamento per una Coda", .advanced),
+            e("Quando esiste già una coda con lo stesso nome della sorgente", .advanced),
+            e("Avvia la riproduzione all'avvio dell'app", .advanced),
+            e("Cast", .advanced),
+            e("Esporta automaticamente i più ascoltati in file CSV", .advanced, .csvExport),
+            e("Carica la copertina dell'album", .advanced),
+            e("Controllo esterno avanzato", .advanced),
+            e("Durata dell'Avanti-veloce", .advanced),
+            e("Durata del Riavvolgi", .advanced),
+            e("Motore di ricerca predefinito", .advanced),
+            e("Interrogazione per cercare la copertina dell'album", .advanced),
+            e("Interrogazione per cercare i testi", .advanced),
+            e("Shuffle avanzato", .advanced, .advancedShuffle),
+            e("Ignora alcune parole all'inizio durante l'ordinamento", .advanced, .ignoreWords),
+            e("Ordinamento alfanumerico", .advanced),
             e("Tema del widget", .widget),
             e("Copertina Album", .widget),
             e("Aggiungi alle playlist", .widget),

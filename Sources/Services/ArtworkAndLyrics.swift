@@ -20,6 +20,8 @@ final class ArtworkLoader: @unchecked Sendable {
     }
 
     func image(for track: Track, url: URL, maxPixel: CGFloat) async -> UIImage? {
+        // "Carica la copertina dell'album" spento: nessuna copertina in tutta l'app.
+        guard Prefs.bool(Prefs.loadArtwork) else { return nil }
         let key = "\(track.id)#\(Int(maxPixel))#\(track.modified.timeIntervalSince1970)" as NSString
         if let box = cache.object(forKey: key) { return box.image }
         let image = await Task.detached(priority: .utility) { () -> UIImage? in

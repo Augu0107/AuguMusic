@@ -310,7 +310,9 @@ struct RootView: View {
                 Button { ui.showSettings = true } label: { Label("Impostazioni", systemImage: "gearshape") }
                 if menuMain.csvContains("quit") {
                     Divider()
-                    Button(role: .destructive) { confirmQuit = true } label: { Label("Chiudi app", systemImage: "power") }
+                    Button(role: .destructive) {
+                        if Prefs.bool(Prefs.confirmQuit) { confirmQuit = true } else { player.persist(); exit(0) }
+                    } label: { Label("Chiudi app", systemImage: "power") }
                 }
             } label: {
                 tabCell(.more, selected: false)

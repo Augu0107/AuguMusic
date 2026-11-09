@@ -639,14 +639,14 @@ enum TrackSort: String, CaseIterable, Identifiable {
     func apply(_ tracks: [Track]) -> [Track] {
         switch self {
         case .original: return tracks
-        case .title: return tracks.sorted { $0.displayTitle.localizedLess($1.displayTitle) }
+        case .title: return tracks.sorted { SortText.less($0.displayTitle, $1.displayTitle, tag: "title") }
         case .artist: return tracks.sorted {
             $0.displayArtist == $1.displayArtist ? LibraryStore.albumOrder($0, $1) : $0.displayArtist.localizedLess($1.displayArtist)
         }
         case .album: return tracks.sorted {
             $0.displayAlbum == $1.displayAlbum ? LibraryStore.albumOrder($0, $1) : $0.displayAlbum.localizedLess($1.displayAlbum)
         }
-        case .fileName: return tracks.sorted { $0.fileName.localizedLess($1.fileName) }
+        case .fileName: return tracks.sorted { SortText.less($0.fileName, $1.fileName, tag: "fileName") }
         case .duration: return tracks.sorted { $0.duration < $1.duration }
         case .year: return tracks.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
         case .dateAdded: return tracks.sorted { $0.dateAdded > $1.dateAdded }

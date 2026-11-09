@@ -42,6 +42,7 @@ final class LibraryStore: ObservableObject {
     init(settings: AppSettings) {
         exceptions = settings.artistExceptions
         TagCleaner.cleanEverywhere = options.hideExtraAll
+        SortText.update(options)
         settings.$artistExceptions
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -65,6 +66,7 @@ final class LibraryStore: ObservableObject {
             || new.scanVideo != options.scanVideo || new.preferTagLib != options.preferTagLib
         options = new
         TagCleaner.cleanEverywhere = new.hideExtraAll
+        SortText.update(new)
         setTracks(rawTracks)
         if needsRescan { Task { await rescan(forceReread: true) } }
     }
@@ -278,7 +280,7 @@ final class LibraryStore: ObservableObject {
         rawTracks = list
         let minDuration = Double(options.minDuration)
         let visible = minDuration > 0 ? list.filter { $0.duration <= 0 || $0.duration >= minDuration } : list
-        let sorted = visible.sorted { $0.displayTitle.localizedLess($1.displayTitle) }
+        let sorted = visible.sorted { SortText.less($0.displayTitle, $1.displayTitle, tag: "title") }
         var map: [String: Track] = [:]
         map.reserveCapacity(sorted.count)
         var counts: [UUID: Int] = [:]
@@ -345,7 +347,7 @@ final class LibraryStore: ObservableObject {
             let subtitle = artistsSet.count == 1 ? (artistsSet.first ?? "") : "Artisti vari"
             return TrackGroup(kind: .album, id: key, name: sorted[0].displayAlbum, subtitle: subtitle,
                               trackIDs: sorted.map(\.id), year: sorted.compactMap(\.year).max(), duration: sorted.reduce(0) { $0 + $1.duration })
-        }.sorted { $0.name.localizedLess($1.name) }
+        }.sorted { SortText.less($0.name, $1.name, tag: "album") }
 
         func groups(_ kind: GroupKind, _ dict: [String: Bucket]) -> [TrackGroup] {
             dict.map { key, bucket -> TrackGroup in
@@ -357,7 +359,7 @@ final class LibraryStore: ObservableObject {
                 let subtitle = "\(albumCount) album · \(sorted.count) brani"
                 return TrackGroup(kind: kind, id: key, name: bucket.name, subtitle: subtitle,
                                   trackIDs: sorted.map(\.id), year: nil, duration: sorted.reduce(0) { $0 + $1.duration })
-            }.sorted { $0.name.localizedLess($1.name) }
+            }.sorted { SortText.less($0.name, $1.name, tag: kind == .composer ? "composer" : (kind == .albumArtist ? "albumArtist" : "artist")) }
         }
         store[.artist] = groups(.artist, artists)
         store[.albumArtist] = groups(.albumArtist, albumArtists)
@@ -371,7 +373,7 @@ final class LibraryStore: ObservableObject {
             let path = first.directory.isEmpty ? root : root + "/" + first.directory
             let sorted = ts.sorted { $0.fileName.localizedLess($1.fileName) }
             return TrackGroup(kind: .folder, id: key, name: name, subtitle: path, trackIDs: sorted.map(\.id), year: nil, duration: sorted.reduce(0) { $0 + $1.duration })
-        }.sorted { $0.subtitle.localizedLess($1.subtitle) }
+        }.sorted { SortText.less($0.subtitle, $1.subtitle, tag: "folder") }
 
         // Cartelle con un solo album (servono per le copertine "folder.jpg").
         var single = Set<String>()
