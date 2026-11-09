@@ -51,13 +51,14 @@ struct SettingsRootPage: View {
     @EnvironmentObject private var library: LibraryStore
     @State private var showLanguage = false
     @State private var showImporter = false
-    @State private var language = "it"
+    @State private var language = AppLanguage.current
+    @State private var pendingLanguage: String?
 
     var body: some View {
         SettingsPage(title: "Impostazioni") {
             List {
                 Section {
-                    SettingsRow(title: "Lingua", subtitle: "italiano", systemIcon: "globe") { showLanguage = true }
+                    SettingsRow(title: "Lingua", subtitle: AppLanguage.options.first { $0.code == AppLanguage.current }?.name ?? "Italiano", systemIcon: "globe") { showLanguage = true }
                     SettingsRow(title: "Interfaccia", systemIcon: "paintpalette.fill") { nav.path = [.interface] }
                     SettingsRow(title: "Audio", systemIcon: "speaker.wave.2.fill") { nav.path = [.audio] }
                     SettingsRow(title: "Libreria brani e tag", systemIcon: "music.note.list") { nav.path = [.library] }
@@ -71,8 +72,34 @@ struct SettingsRootPage: View {
             .listStyle(.insetGrouped)
         }
         .settingsDialog(isPresented: $showLanguage) {
-            RadioDialog(title: "Scegli lingua", options: [ChoiceOption(id: "it", label: "italiano")],
+            RadioDialog(title: "Scegli lingua",
+                        options: AppLanguage.options.map { ChoiceOption(id: $0.code, label: $0.name) },
                         selection: $language) { showLanguage = false }
+        }
+        .onChange(of: language) { _, code in
+            if code != AppLanguage.current { pendingLanguage = code }
+        }
+        .settingsDialog(isPresented: Binding(get: { pendingLanguage != nil },
+                                             set: { if !$0 { pendingLanguage = nil; language = AppLanguage.current } })) {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Riavvia l'app per cambiare lingua").font(.title3.weight(.semibold))
+                Text("L'app si chiuderà: riaprila per vedere la nuova lingua.").foregroundStyle(.secondary)
+                HStack(spacing: 40) {
+                    Spacer()
+                    Button("ANNULLA") { pendingLanguage = nil; language = AppLanguage.current }
+                    Button("CHIUDI E CAMBIA LINGUA") {
+                        if let code = pendingLanguage {
+                            AppLanguage.set(code)
+                            PlayerController.shared?.persist()
+                            exit(0)
+                        }
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .buttonStyle(.plain)
+            }
+            .padding(26)
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let url = urls.first {
@@ -175,7 +202,7 @@ struct TabOrderDialog: View {
                         let hidden = isHidden(item)
                         HStack(spacing: 20) {
                             AppIconView(glyph: tab.glyph, size: 24).foregroundStyle(.secondary)
-                            Text(tab.title)
+                            Text(L(tab.title))
                                 .strikethrough(hidden)
                                 .foregroundStyle(hidden ? Color.secondary : Color.primary)
                         }
@@ -195,7 +222,7 @@ struct TabOrderDialog: View {
     private func fixedRow(_ tab: MainTab) -> some View {
         HStack(spacing: 20) {
             AppIconView(glyph: tab.glyph, size: 24).foregroundStyle(.secondary)
-            Text(tab.title)
+            Text(L(tab.title))
         }
         .padding(.leading, 26)
         .padding(.vertical, 12)
@@ -245,7 +272,7 @@ struct ThemeSettingsPage: View {
                             Button { settings.theme = theme } label: {
                                 HStack(spacing: 18) {
                                     RadioMark(selected: settings.theme == theme)
-                                    Text(theme.label).foregroundStyle(Color.primary)
+                                    Text(L(theme.label)).foregroundStyle(Color.primary)
                                     Spacer()
                                 }
                                 .padding(.horizontal, 30)
@@ -785,7 +812,7 @@ struct SettingsEntry: Identifiable {
     let title: String
     let path: [SettingsDest]
 
-    var category: String { path.isEmpty ? "Impostazioni" : path.map(\.title).joined(separator: " > ") }
+    var category: String { path.isEmpty ? "Impostazioni" : path.map { L($0.title) }.joined(separator: " > ") }
 
     static let all: [SettingsEntry] = {
         func e(_ title: String, _ path: SettingsDest...) -> SettingsEntry { SettingsEntry(title: title, path: path) }
@@ -944,7 +971,7 @@ struct SettingsSearchResults: View {
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let results = SettingsEntry.all.filter { $0.title.matchesSearch(q) || $0.category.matchesSearch(q) }
+        let results = SettingsEntry.all.filter { $0.title.matchesSearch(q) || $0.category.matchesSearch(q) || L($0.title).matchesSearch(q) || L($0.category).matchesSearch(q) }
         let categories = Set(results.map(\.category)).count
         VStack(alignment: .leading, spacing: 0) {
             Text(results.isEmpty ? "Nessun risultato" : (categories == 1 ? "Trovato in 1 categoria" : "Trovato in \(categories) categorie"))
@@ -958,10 +985,10 @@ struct SettingsSearchResults: View {
                     ForEach(results) { entry in
                         Button { open(entry) } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(entry.category)
+                                Text(L(entry.category))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(Color.accentColor)
-                                Text(entry.title)
+                                Text(L(entry.title))
                                     .foregroundStyle(Color.primary)
                                     .multilineTextAlignment(.leading)
                             }

@@ -205,15 +205,15 @@ struct TagCheckboxDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title).font(.title3.weight(.semibold)).padding(.horizontal, 26).padding(.top, 26)
-            Text(message).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 26).padding(.vertical, 14)
+            Text(L(title)).font(.title3.weight(.semibold)).padding(.horizontal, 26).padding(.top, 26)
+            Text(L(message)).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 26).padding(.vertical, 14)
             ForEach(AdvancedSettingsPage.tagOptions) { option in
                 Button {
                     if selected.contains(option.id) { selected.remove(option.id) } else { selected.insert(option.id) }
                 } label: {
                     HStack(spacing: 24) {
                         CheckMark(checked: selected.contains(option.id))
-                        Text(option.label).foregroundStyle(Color.primary.opacity(0.8))
+                        Text(L(option.label)).foregroundStyle(Color.primary.opacity(0.8))
                         Spacer()
                     }
                     .padding(.horizontal, 26)

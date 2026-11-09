@@ -98,11 +98,11 @@ struct InfoDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
+            Text(L(title))
                 .font(.title3.weight(.semibold))
                 .padding(26)
             ScrollView {
-                Text(text)
+                Text(L(text))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 26)

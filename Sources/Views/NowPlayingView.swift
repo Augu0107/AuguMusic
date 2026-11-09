@@ -396,7 +396,7 @@ struct NowPlayingView: View {
             Menu {
                 Picker("Ripetizione", selection: $player.repeatMode) {
                     ForEach(RepeatMode.allCases) { mode in
-                        Label(mode.label, systemImage: mode.icon).tag(mode)
+                        Label(L(mode.label), systemImage: mode.icon).tag(mode)
                     }
                 }
             } label: {
@@ -518,7 +518,7 @@ struct NowPlayingView: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon).font(.title3)
-                Text(label).font(.caption2).lineLimit(1)
+                Text(L(label)).font(.caption2).lineLimit(1)
             }
             .foregroundStyle(active ? Color.accentColor : Color.secondary)
             .frame(maxWidth: .infinity, minHeight: 44)
@@ -529,7 +529,7 @@ struct NowPlayingView: View {
     private var sidePanelView: some View {
         VStack(spacing: 0) {
             Picker("Pannello", selection: $sidePanel) {
-                ForEach(SidePanel.allCases) { Text($0.label).tag($0) }
+                ForEach(SidePanel.allCases) { Text(L($0.label)).tag($0) }
             }
             .pickerStyle(.segmented)
             .padding(12)

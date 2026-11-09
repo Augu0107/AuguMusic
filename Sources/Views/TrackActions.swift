@@ -44,7 +44,7 @@ struct TrackExtraActions: View {
             if on("advShuffle") && tracks.count > 1 {
                 Menu {
                     ForEach(AdvancedShuffle.allCases) { mode in
-                        Button(mode.label) {
+                        Button(L(mode.label)) {
                             player.play(AdvancedShuffle.order(tracks, by: mode, library: library), startAt: 0, source: "Shuffle avanzato")
                             done()
                         }

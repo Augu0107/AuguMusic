@@ -199,7 +199,7 @@ private struct RestoreDialog: View {
         Button { value.wrappedValue.toggle() } label: {
             HStack(spacing: 24) {
                 CheckMark(checked: value.wrappedValue)
-                Text(title).foregroundStyle(Color.primary.opacity(0.8))
+                Text(L(title)).foregroundStyle(Color.primary.opacity(0.8))
                 Spacer()
             }
             .padding(.horizontal, 26)
@@ -264,7 +264,7 @@ struct HelpInfoView: View {
 
     private func infoBox<C: View>(icon: String, title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: icon).font(.title3.weight(.semibold))
+            Label(L(title), systemImage: icon).font(.title3.weight(.semibold))
             content()
         }
         .padding(22)
@@ -275,7 +275,7 @@ struct HelpInfoView: View {
     private func point(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "checkmark").foregroundStyle(.secondary)
-            Text(text).foregroundStyle(.secondary)
+            Text(L(text)).foregroundStyle(.secondary)
         }
     }
 }

@@ -52,7 +52,7 @@ struct WidgetSettingsPage: View {
                         Button { settings.widgetStyle = style; refresh() } label: {
                             HStack(spacing: 22) {
                                 RadioMark(selected: settings.widgetStyle == style)
-                                Text(style.label).foregroundStyle(Color.primary)
+                                Text(L(style.label)).foregroundStyle(Color.primary)
                                 Spacer()
                             }
                             .padding(.horizontal, 34)
@@ -122,7 +122,7 @@ struct WidgetSettingsPage: View {
     private func tabButton(_ title: String, _ i: Int) -> some View {
         Button { tab = i } label: {
             VStack(spacing: 10) {
-                Text(title)
+                Text(L(title))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(tab == i ? Color.primary : Color.secondary)
                 Rectangle().fill(tab == i ? Color.primary : Color.clear).frame(height: 3)
@@ -141,7 +141,7 @@ struct WidgetSettingsPage: View {
         } label: {
             HStack(spacing: 18) {
                 CheckMark(checked: options[key] ?? false)
-                Text(title).foregroundStyle(Color.primary)
+                Text(L(title)).foregroundStyle(Color.primary)
                 Spacer()
             }
             .padding(.horizontal, 34)

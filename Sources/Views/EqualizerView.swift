@@ -278,8 +278,8 @@ struct EqualizerView: View {
     private func knobBlock(title: String, value: Binding<Double>, text: String) -> some View {
         VStack(spacing: 14) {
             Knob(value: value).frame(width: 200, height: 200)
-            Text(title).font(.title3).foregroundStyle(.secondary)
-            Text(text).font(.headline).foregroundStyle(.secondary)
+            Text(L(title)).font(.title3).foregroundStyle(.secondary)
+            Text(L(text)).font(.headline).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -288,7 +288,7 @@ struct EqualizerView: View {
         let selected = abs(settings.eqPreamp - value) < 0.01
         return Button { settings.eqPreamp = value } label: {
             VStack(spacing: 2) {
-                Text(title)
+                Text(L(title))
                 Text(db)
             }
             .font(.subheadline)
@@ -302,7 +302,7 @@ struct EqualizerView: View {
 
     private func monoButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.title3)
                 .foregroundStyle(selected ? Color.accentColor : Color.secondary)
                 .frame(maxWidth: .infinity, minHeight: 70)

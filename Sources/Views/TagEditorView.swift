@@ -176,7 +176,7 @@ struct TagEditorView: View {
 
     private func fieldRow(_ key: TagKey) -> some View {
         HStack {
-            Text(key.label)
+            Text(L(key.label))
                 .foregroundStyle(.secondary)
                 .frame(width: 120, alignment: .leading)
             TextField(mixed.contains(key) ? "Valori diversi" : key.label,

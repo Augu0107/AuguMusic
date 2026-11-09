@@ -70,7 +70,7 @@ struct GroupListView: View {
                 .themedBackground()
             }
         }
-        .navigationTitle(kind.title)
+        .navigationTitle(L(kind.title))
         .modifier(OptionalSearch(enabled: searchEnabled, query: $query, prompt: "Cerca in \(kind.title.lowercased())"))
         .toolbar {
             if !all.isEmpty {
@@ -319,25 +319,26 @@ struct ArtistsTabView: View {
         }
         .pinnedTop {
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
+                HStack(spacing: 12) {
                     ForEach(modes, id: \.self) { kind in
                         let selected = kind == mode
                         let title = kind == .artist ? "Artisti" : kind == .albumArtist ? "Artisti album" : "Compositori"
                         Button { modeRaw = kind.rawValue } label: {
-                            Text(title)
-                                .font(.subheadline.weight(.semibold))
+                            // Come Musicolet: larghi quanto il testo, a pillola, bordo grigio (arancione se scelto).
+                            Text(L(title))
+                                .font(.body)
                                 .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .stroke(selected ? Color.accentColor : Color(uiColor: .systemGray4), lineWidth: selected ? 1.5 : 1))
-                                .contentShape(Rectangle())
+                                .padding(.horizontal, 18)
+                                .frame(height: 42)
+                                .background(Color(uiColor: .systemBackground), in: Capsule())
+                                .overlay(Capsule().stroke(selected ? Color.accentColor : Color(uiColor: .systemGray2), lineWidth: 1.5))
+                                .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(Color(uiColor: .systemBackground))
@@ -349,7 +350,7 @@ struct ArtistsTabView: View {
             }
         }
         .sheet(isPresented: $showSearch) { GroupSearchSheet(kind: mode) }
-        .navigationTitle(mode.title)
+        .navigationTitle(L(mode.title))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -803,7 +804,7 @@ struct TrackListScreen: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Picker("Ordina per", selection: Binding(get: { sort ?? initialSort }, set: { sort = $0 })) {
-                        ForEach(TrackSort.allCases) { Text($0.label).tag($0) }
+                        ForEach(TrackSort.allCases) { Text(L($0.label)).tag($0) }
                     }
                     Toggle("Ordine inverso", isOn: $descending)
                     Divider()

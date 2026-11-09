@@ -67,7 +67,7 @@ struct AlbumDetailView: View {
 
                 if split {
                 Picker("Filtra per", selection: $filterKind) {
-                    ForEach(FilterKind.allCases) { Text($0.label).tag($0) }
+                    ForEach(FilterKind.allCases) { Text(L($0.label)).tag($0) }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()

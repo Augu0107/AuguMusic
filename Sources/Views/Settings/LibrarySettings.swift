@@ -194,7 +194,7 @@ struct LibrarySettingsPage: View {
     }
 
     private func sectionTitle(_ title: String, first: Bool = false) -> some View {
-        Text(title)
+        Text(L(title))
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(Color.accentColor)
             .padding(.leading, 72)
@@ -257,7 +257,7 @@ struct MinDurationDialog: View {
             .frame(width: 110, height: 84)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(uiColor: .systemGray3), lineWidth: 1.5))
             .overlay(alignment: .top) {
-                Text(label).font(.caption).foregroundStyle(.secondary)
+                Text(L(label)).font(.caption).foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .background(Color(uiColor: .systemBackground))
                     .offset(y: -8)
@@ -292,7 +292,7 @@ struct AlbumMergeDialog: View {
                 } label: {
                     HStack(spacing: 24) {
                         CheckMark(checked: selected.contains(option.id))
-                        Text(option.label).foregroundStyle(Color.primary.opacity(0.8))
+                        Text(L(option.label)).foregroundStyle(Color.primary.opacity(0.8))
                         Spacer()
                     }
                     .padding(.horizontal, 26)
@@ -329,8 +329,8 @@ struct TextInputDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(title).font(.title3.weight(.semibold))
-            if let message { Text(message).font(.subheadline).foregroundStyle(.secondary) }
+            Text(L(title)).font(.title3.weight(.semibold))
+            if let message { Text(L(message)).font(.subheadline).foregroundStyle(.secondary) }
             TextField("", text: $text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

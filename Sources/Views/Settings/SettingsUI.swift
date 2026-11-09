@@ -86,7 +86,7 @@ struct SettingsHeader: View {
                     }
                 }
             } else {
-                Text(title)
+                Text(L(title))
                     .font(.title2.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
@@ -167,12 +167,12 @@ struct SettingsRow: View {
                 .foregroundStyle(Color.secondary)
                 .frame(width: 72, alignment: .center)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
+                    Text(L(title))
                         .font(.body)
                         .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.6))
                         .multilineTextAlignment(.leading)
                     if let subtitle {
-                        Text(subtitle)
+                        Text(L(subtitle))
                             .font(.subheadline)
                             .foregroundStyle(Color.secondary.opacity(enabled ? 1 : 0.6))
                             .multilineTextAlignment(.leading)
@@ -199,11 +199,11 @@ struct SettingsToggleRow: View {
         HStack(spacing: 0) {
             Color.clear.frame(width: 72)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(L(title))
                     .font(.body)
                     .foregroundStyle(Color.primary.opacity(0.8))
                 if let subtitle {
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                    Text(L(subtitle)).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 16)
@@ -230,7 +230,7 @@ struct SettingsSliderRow: View {
         HStack(spacing: 0) {
             Color.clear.frame(width: 72)
             VStack(alignment: .leading, spacing: 10) {
-                Text(title).font(.body)
+                Text(L(title)).font(.body)
                 HStack(spacing: 16) {
                     Slider(value: $value, in: range, step: step)
                     Text(label(value))
@@ -253,7 +253,7 @@ struct SettingsSectionHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HairlineSeparator()
-            Text(title)
+            Text(L(title))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .padding(.leading, 72)
@@ -311,7 +311,7 @@ struct DialogButtons: View {
         HStack(spacing: 28) {
             if let reset { Button("RESET", action: reset) }
             Spacer()
-            Button(cancelTitle, action: cancel)
+            Button(L(cancelTitle), action: cancel)
             if let save { Button("SALVA", action: save) }
         }
         .font(.subheadline.weight(.semibold))
@@ -332,7 +332,7 @@ struct RadioDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
+            Text(L(title))
                 .font(.title3.weight(.semibold))
                 .padding(.horizontal, 26)
                 .padding(.top, 26)
@@ -347,10 +347,10 @@ struct RadioDialog: View {
                             HStack(spacing: 24) {
                                 RadioMark(selected: option.id == selection)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(option.label)
+                                    Text(L(option.label))
                                         .foregroundStyle(Color.primary.opacity(0.8))
                                     if let detail = option.detail {
-                                        Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                                        Text(L(detail)).font(.subheadline).foregroundStyle(.secondary)
                                     }
                                 }
                                 .multilineTextAlignment(.leading)
@@ -416,7 +416,7 @@ struct CheckboxDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
+            Text(L(title))
                 .font(.title3.weight(.semibold))
                 .padding(.horizontal, 26)
                 .padding(.top, 26)
@@ -429,7 +429,7 @@ struct CheckboxDialog: View {
                         } label: {
                             HStack(spacing: 24) {
                                 CheckMark(checked: selected.contains(option.id))
-                                Text(option.label)
+                                Text(L(option.label))
                                     .multilineTextAlignment(.leading)
                                     .foregroundStyle(Color.primary.opacity(0.8))
                                 Spacer(minLength: 0)

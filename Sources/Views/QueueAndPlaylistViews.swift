@@ -261,7 +261,7 @@ struct PlaylistsView: View {
             HStack(spacing: 14) {
                 AppIconView(glyph: glyph, size: 22)
                     .foregroundStyle(.secondary)
-                Text(title)
+                Text(L(title))
             }
             .padding(.vertical, 2)
         }

@@ -287,7 +287,7 @@ struct RootView: View {
                     tabCell(t.glyph, selected: t == tab)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(t.title)
+                .accessibilityLabel(L(t.title))
                 .contextMenu {
                     if !t.isRequired {
                         Button(role: .destructive) {

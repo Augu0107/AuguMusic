@@ -96,9 +96,9 @@ struct SettingsCheckRow: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 72)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.body).foregroundStyle(Color.primary.opacity(enabled ? 0.8 : 0.35))
+                    Text(L(title)).font(.body).foregroundStyle(Color.primary.opacity(enabled ? 0.8 : 0.35))
                     if let subtitle {
-                        Text(subtitle).font(.subheadline).foregroundStyle(Color.secondary.opacity(enabled ? 1 : 0.5))
+                        Text(L(subtitle)).font(.subheadline).foregroundStyle(Color.secondary.opacity(enabled ? 1 : 0.5))
                     }
                 }
                 .multilineTextAlignment(.leading)
@@ -220,7 +220,7 @@ struct SpeedPitchDialog: View {
 
     private func valueEditor(title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.title3.weight(.semibold))
+            Text(L(title)).font(.title3.weight(.semibold))
             HStack(spacing: 20) {
                 stepButton("–") { value.wrappedValue = max(range.lowerBound, (value.wrappedValue - 0.05).roundedTo(0.01)) }
                 TextField("", value: value, format: .number.precision(.fractionLength(2)))
@@ -242,7 +242,7 @@ struct SpeedPitchDialog: View {
 
     private func stepButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 60, height: 46)
@@ -253,7 +253,7 @@ struct SpeedPitchDialog: View {
 
     private func modeButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(selected ? Color.accentColor : Color.secondary)
                 .frame(width: 104, height: 46)
@@ -265,7 +265,7 @@ struct SpeedPitchDialog: View {
 
     private func scopeButton(_ title: String, selected: Bool, enabled: Bool = true, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.subheadline.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(enabled ? 1 : 0.4))
@@ -401,7 +401,7 @@ struct AudioFocusDialog: View {
     private func point(_ text: String, small: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             if !small { Text("✓") }
-            Text(text)
+            Text(L(text))
         }
         .font(small ? .footnote : .body)
         .foregroundStyle(small ? Color.secondary : Color.primary)
@@ -542,9 +542,9 @@ struct NumberInputDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(title).font(.title3.weight(.semibold))
+            Text(L(title)).font(.title3.weight(.semibold))
             if let message {
-                Text(message).font(.subheadline).foregroundStyle(.secondary)
+                Text(L(message)).font(.subheadline).foregroundStyle(.secondary)
             }
             TextField("", text: $text)
                 .keyboardType(.numbersAndPunctuation)
@@ -639,7 +639,7 @@ struct ReplayGainCalcPage: View {
 
     private func choiceBox(title: String, options: [(String, Bool, () -> Void)]) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(title).font(.title3).foregroundStyle(Color.primary.opacity(0.8))
+            Text(L(title)).font(.title3).foregroundStyle(Color.primary.opacity(0.8))
             ForEach(options.indices, id: \.self) { i in
                 Button(action: options[i].2) {
                     HStack(spacing: 14) {
