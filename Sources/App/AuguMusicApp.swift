@@ -39,7 +39,7 @@ struct AuguMusicApp: App {
                 .preferredColorScheme(settings.theme.colorScheme)
                 .tint(settings.accent.color)
                 .task {
-                    await library.rescan()
+                    await library.autoScanIfEnabled()
                     player.libraryDidChange()
                 }
         }

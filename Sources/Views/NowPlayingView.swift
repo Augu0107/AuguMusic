@@ -321,11 +321,11 @@ struct NowPlayingView: View {
     /// Titolo centrato, sotto l'artista e sotto ancora l'album (come Musicolet).
     private var titleBlock: some View {
         VStack(alignment: centered ? .center : .leading, spacing: 4) {
-            infoLine(player.currentTrack?.displayTitle ?? "Niente in riproduzione", font: .title2, color: .primary, lines: 2)
+            infoLine(player.currentTrack.map { TagCleaner.nowPlaying($0.displayTitle) } ?? "Niente in riproduzione", font: .title2, color: .primary, lines: 2)
             if let t = player.currentTrack {
                 if showArtist {
                     Button { openArtist(t) } label: {
-                        infoLine(t.displayArtist, icon: titleIcons ? "music.mic" : nil, font: .body, color: .secondary, lines: 1)
+                        infoLine(TagCleaner.nowPlaying(t.displayArtist), icon: titleIcons ? "music.mic" : nil, font: .body, color: .secondary, lines: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -333,7 +333,7 @@ struct NowPlayingView: View {
                     Button {
                         if let albumID = library.albumID(for: t) { ui.navigate(.group(.album, albumID)) }
                     } label: {
-                        infoLine(t.displayAlbum, icon: titleIcons ? "square.stack" : nil, font: .callout,
+                        infoLine(TagCleaner.nowPlaying(t.displayAlbum), icon: titleIcons ? "square.stack" : nil, font: .callout,
                                  color: Color.secondary.opacity(0.8), lines: 1)
                     }
                     .buttonStyle(.plain)

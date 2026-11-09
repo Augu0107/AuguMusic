@@ -32,10 +32,10 @@ struct Track: Codable, Identifiable, Hashable {
     var fileExtension: String { (relativePath as NSString).pathExtension.lowercased() }
     var directory: String { (relativePath as NSString).deletingLastPathComponent }
 
-    var displayTitle: String { title.isEmpty ? (fileName as NSString).deletingPathExtension : title }
-    var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
-    var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
-    var displayAlbumArtist: String { albumArtist.isEmpty ? displayArtist : albumArtist }
+    var displayTitle: String { title.isEmpty ? (fileName as NSString).deletingPathExtension : TagCleaner.everywhere(title) }
+    var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : TagCleaner.everywhere(artist) }
+    var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : TagCleaner.everywhere(album) }
+    var displayAlbumArtist: String { albumArtist.isEmpty ? displayArtist : TagCleaner.everywhere(albumArtist) }
 
     var genreList: [String] {
         let parts = genre.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

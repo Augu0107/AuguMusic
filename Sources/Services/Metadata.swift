@@ -5,9 +5,16 @@ import SFBAudioEngine
 // MARK: - Lettura dei tag
 
 enum MetadataReader {
-    static func read(_ entry: FileEntry, dateAdded: Date) async -> Track {
+    static func read(_ entry: FileEntry, dateAdded: Date, preferTagLib: Bool = false) async -> Track {
         var t = Track(id: entry.id, folderID: entry.folderID, relativePath: entry.relativePath,
                       fileSize: entry.size, modified: entry.modified, dateAdded: dateAdded)
+
+        // "Scanner per AuguMusic": prima TagLib, poi iOS solo per la durata se manca.
+        if preferTagLib {
+            applyTagLib(url: entry.url, to: &t)
+            if t.duration <= 0 { t.duration = await assetDuration(entry.url) }
+            if !t.title.isEmpty || !t.artist.isEmpty { return t }
+        }
 
         if entry.url.pathExtension.lowercased() == "flac" {
             if let info = FLACParser.parse(url: entry.url, includePicture: false) {

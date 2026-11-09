@@ -188,6 +188,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.persist() }
             if phase == .active, settings.theme == .timeBased { settings.objectWillChange.send() }
+            if phase == .active { Task { await library.autoScanIfEnabled() } }
         }
     }
 

@@ -32,40 +32,78 @@ final class LibraryStore: ObservableObject {
     private var folderCounts: [UUID: Int] = [:]
     private var folderURLs: [UUID: URL] = [:]
     private var didLoad = false
-    private var separators: [String] = [";"]
     private var exceptions: [String] = []
+    private(set) var options = LibraryOptions.current()
+    /// Tutti i brani letti, anche quelli nascosti perché troppo corti.
+    private var rawTracks: [Track] = []
     private var cancellables = Set<AnyCancellable>()
+    private var lastAutoScan = Date.distantPast
 
     init(settings: AppSettings) {
-        separators = settings.artistSeparators
         exceptions = settings.artistExceptions
-        settings.$artistSeparators
-            .combineLatest(settings.$artistExceptions)
+        TagCleaner.cleanEverywhere = options.hideExtraAll
+        settings.$artistExceptions
             .dropFirst()
             .receive(on: RunLoop.main)
-            .sink { [weak self] seps, excs in
+            .sink { [weak self] excs in
                 guard let self else { return }
-                self.separators = seps
                 self.exceptions = excs
-                self.setTracks(self.tracks)
+                self.setTracks(self.rawTracks)
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.optionsMaybeChanged() }
+            .store(in: &cancellables)
+    }
+
+    /// Le opzioni di "Libreria brani e tag" sono cambiate: ricostruisco album, artisti, generi.
+    private func optionsMaybeChanged() {
+        let new = LibraryOptions.current()
+        guard new != options else { return }
+        let needsRescan = new.scanHidden != options.scanHidden || new.scanNomedia != options.scanNomedia
+            || new.scanVideo != options.scanVideo || new.preferTagLib != options.preferTagLib
+        options = new
+        TagCleaner.cleanEverywhere = new.hideExtraAll
+        setTracks(rawTracks)
+        if needsRescan { Task { await rescan(forceReread: true) } }
+    }
+
+    /// Scansione automatica all'avvio e quando si torna nell'app (al massimo una volta al minuto).
+    func autoScanIfEnabled() async {
+        guard Prefs.bool(Prefs.autoScan) || rawTracks.isEmpty, Date().timeIntervalSince(lastAutoScan) > 60 else { return }
+        lastAutoScan = Date()
+        await rescan()
+    }
+
+    private func split(_ text: String, enabled: Bool, separators: [String]) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        guard enabled else { return [trimmed] }
+        return ArtistSplitter.split(trimmed, separators: separators, exceptions: exceptions)
     }
 
     /// Artisti di un brano, divisi con i separatori scelti dall'utente.
     func artistNames(for t: Track) -> [String] {
-        let parts = ArtistSplitter.split(t.artist, separators: separators, exceptions: exceptions)
+        let parts = split(t.artist, enabled: options.multiArtist, separators: options.sepArtist).map(TagCleaner.everywhere)
         return parts.isEmpty ? [t.displayArtist] : parts
     }
 
     func albumArtistNames(for t: Track) -> [String] {
-        if t.albumArtist.isEmpty { return artistNames(for: t) }
-        let parts = ArtistSplitter.split(t.albumArtist, separators: separators, exceptions: exceptions)
+        if t.albumArtist.isEmpty {
+            return options.albumArtistFallback ? artistNames(for: t) : ["Artista album sconosciuto"]
+        }
+        let parts = split(t.albumArtist, enabled: options.multiAlbumArtist, separators: options.sepAlbumArtist).map(TagCleaner.everywhere)
         return parts.isEmpty ? [t.displayAlbumArtist] : parts
     }
 
     func composerNames(for t: Track) -> [String] {
-        ArtistSplitter.split(t.composer, separators: separators, exceptions: exceptions)
+        split(t.composer, enabled: options.multiComposer, separators: options.sepComposer)
+    }
+
+    func genreNames(for t: Track) -> [String] {
+        let parts = split(t.genre, enabled: options.multiGenre, separators: options.sepGenre)
+        return parts.isEmpty ? ["Genere sconosciuto"] : parts
     }
 
     // MARK: Caricamento
@@ -108,7 +146,7 @@ final class LibraryStore: ObservableObject {
     }
 
     private func saveFolders() { Storage.save(folders, to: "folders.json") }
-    private func saveTracks() { Storage.save(tracks, to: "library.json") }
+    private func saveTracks() { Storage.save(rawTracks, to: "library.json") }
 
     // MARK: Cartelle
 
@@ -136,7 +174,7 @@ final class LibraryStore: ObservableObject {
         folderURLs[id] = nil
         folders.removeAll { $0.id == id }
         saveFolders()
-        setTracks(tracks.filter { $0.folderID != id })
+        setTracks(rawTracks.filter { $0.folderID != id })
         saveTracks()
     }
 
@@ -151,8 +189,9 @@ final class LibraryStore: ObservableObject {
 
     // MARK: Scansione
 
-    func rescan() async {
+    func rescan(forceReread: Bool = false) async {
         guard !isScanning else { return }
+        let opts = options
         isScanning = true
         progress.done = 0
         progress.total = 0
@@ -161,17 +200,18 @@ final class LibraryStore: ObservableObject {
         let unreachable = Set(folders.map(\.id)).subtracting(roots.map { $0.0 })
         let excludedStored = Prefs.string(Prefs.excludedFolders)
         let entries = await Task.detached(priority: .userInitiated) {
-            LibraryScanner.listFiles(roots: roots).filter { entry in
+            LibraryScanner.listFiles(roots: roots, options: opts).filter { entry in
                 let dir = (entry.relativePath as NSString).deletingLastPathComponent
                 return !ExcludedFolders.isExcluded(entry.folderID.uuidString + "|" + dir, stored: excludedStored)
             }
         }.value
 
-        let old = byID
+        var old: [String: Track] = [:]
+        for t in rawTracks { old[t.id] = t }
         // Quando cambia il modo di leggere i tag, rileggo tutto una volta.
         let currentReaderVersion = 2
-        let cacheValid = UserDefaults.standard.integer(forKey: "metadataReaderVersion") >= currentReaderVersion
-        var result: [Track] = tracks.filter { unreachable.contains($0.folderID) }
+        let cacheValid = !forceReread && UserDefaults.standard.integer(forKey: "metadataReaderVersion") >= currentReaderVersion
+        var result: [Track] = rawTracks.filter { unreachable.contains($0.folderID) }
         var pending: [FileEntry] = []
         for entry in entries {
             if cacheValid, let t = old[entry.id], t.modified == entry.modified, t.fileSize == entry.size {
@@ -189,7 +229,7 @@ final class LibraryStore: ObservableObject {
             let read: [Track] = await withTaskGroup(of: Track.self) { group in
                 for entry in chunk {
                     let added = old[entry.id]?.dateAdded ?? now
-                    group.addTask { await MetadataReader.read(entry, dateAdded: added) }
+                    group.addTask { await MetadataReader.read(entry, dateAdded: added, preferTagLib: opts.preferTagLib) }
                 }
                 var out: [Track] = []
                 for await t in group { out.append(t) }
@@ -208,18 +248,20 @@ final class LibraryStore: ObservableObject {
 
     /// Rilegge i tag di alcuni brani (dopo il tag editor).
     func refresh(trackIDs: [String]) async {
+        var raw: [String: Track] = [:]
+        for t in rawTracks { raw[t.id] = t }
         var entries: [FileEntry] = []
         for id in trackIDs {
-            guard let t = byID[id], let url = url(for: t) else { continue }
+            guard let t = raw[id], let url = url(for: t) else { continue }
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
             entries.append(FileEntry(id: t.id, folderID: t.folderID, url: url, relativePath: t.relativePath,
                                      size: Int64(values?.fileSize ?? Int(t.fileSize)),
                                      modified: values?.contentModificationDate ?? Date()))
         }
-        var updated = byID
+        var updated = raw
         for e in entries {
-            let added = byID[e.id]?.dateAdded ?? Date()
-            updated[e.id] = await MetadataReader.read(e, dateAdded: added)
+            let added = raw[e.id]?.dateAdded ?? Date()
+            updated[e.id] = await MetadataReader.read(e, dateAdded: added, preferTagLib: options.preferTagLib)
         }
         setTracks(Array(updated.values))
         saveTracks()
@@ -233,7 +275,10 @@ final class LibraryStore: ObservableObject {
     }
 
     private func setTracks(_ list: [Track]) {
-        let sorted = list.sorted { $0.displayTitle.localizedLess($1.displayTitle) }
+        rawTracks = list
+        let minDuration = Double(options.minDuration)
+        let visible = minDuration > 0 ? list.filter { $0.duration <= 0 || $0.duration >= minDuration } : list
+        let sorted = visible.sorted { $0.displayTitle.localizedLess($1.displayTitle) }
         var map: [String: Track] = [:]
         map.reserveCapacity(sorted.count)
         var counts: [UUID: Int] = [:]
@@ -255,10 +300,15 @@ final class LibraryStore: ObservableObject {
         return a.fileName.localizedLess(b.fileName)
     }
 
-    private static func albumKey(_ t: Track) -> String {
-        let album = t.album.lowercased()
-        if !t.albumArtist.isEmpty { return album + "\u{1}" + t.albumArtist.lowercased() }
-        return album + "\u{1}" + t.folderID.uuidString + "/" + t.directory.lowercased()
+    /// "Strategia di unione degli album": due brani sono nello stesso album se coincidono il titolo
+    /// e i parametri scelti (artista album, compositore, anno). Senza titolo: un album per cartella.
+    private static func albumKey(_ t: Track, merge: Set<String>) -> String {
+        if t.album.isEmpty { return "\u{2}" + t.folderID.uuidString + "/" + t.directory.lowercased() }
+        var key = t.album.lowercased()
+        if merge.contains("albumArtist") { key += "\u{1}" + t.albumArtist.lowercased() }
+        if merge.contains("composer") { key += "\u{1}" + t.composer.lowercased() }
+        if merge.contains("year") { key += "\u{1}" + (t.year.map { String($0) } ?? "") }
+        return key
     }
 
     private func buildGroups(_ list: [Track]) {
@@ -276,12 +326,12 @@ final class LibraryStore: ObservableObject {
         }
 
         for t in list {
-            let ak = Self.albumKey(t)
+            let ak = Self.albumKey(t, merge: options.albumMerge)
             albumKeys[t.id] = ak
             albums[ak, default: []].append(t)
             for a in artistNames(for: t) { add(&artists, a, t) }
             for a in albumArtistNames(for: t) { add(&albumArtists, a, t) }
-            for g in t.genreList { add(&genres, g, t) }
+            for g in genreNames(for: t) { add(&genres, g, t) }
             for c in composerNames(for: t) { add(&composers, c, t) }
             folderBuckets[Self.folderKey(t), default: []].append(t)
         }
@@ -323,6 +373,13 @@ final class LibraryStore: ObservableObject {
             return TrackGroup(kind: .folder, id: key, name: name, subtitle: path, trackIDs: sorted.map(\.id), year: nil, duration: sorted.reduce(0) { $0 + $1.duration })
         }.sorted { $0.subtitle.localizedLess($1.subtitle) }
 
+        // Cartelle con un solo album (servono per le copertine "folder.jpg").
+        var single = Set<String>()
+        for (key, ts) in folderBuckets where Set(ts.map { albumKeys[$0.id] ?? "" }).count == 1 {
+            if let dir = directoryURL(folderKey: key) { single.insert(dir.standardizedFileURL.path) }
+        }
+        FolderAlbumIndex.shared.update(single)
+
         groupStore = store
         var lookup: [GroupKind: [String: TrackGroup]] = [:]
         for (kind, list) in store {
@@ -360,24 +417,37 @@ enum LibraryScanner {
         "ogg", "oga", "opus", "spx", "wv", "ape", "mpc", "tta",
     ]
 
-    static func listFiles(roots: [(UUID, URL)]) -> [FileEntry] {
+    static func listFiles(roots: [(UUID, URL)], options: LibraryOptions) -> [FileEntry] {
+        let extensions = options.scanVideo ? audioExtensions.union(LibraryOptions.videoExtensions) : audioExtensions
         let fm = FileManager.default
         var out: [FileEntry] = []
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
         for (folderID, root) in roots {
             let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
             guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]) else { continue }
+            if !options.scanNomedia, fm.fileExists(atPath: root.appendingPathComponent(".nomedia").path) { continue }
             while let url = enumerator.nextObject() as? URL {
                 let name = url.lastPathComponent
+                let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
                 if name.hasPrefix(".") {
                     if name.hasSuffix(".icloud") {
                         try? fm.startDownloadingUbiquitousItem(at: url)
-                    } else if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                        continue
+                    }
+                    if isDir && !options.scanHidden {
+                        enumerator.skipDescendants()
+                        continue
+                    }
+                    if !isDir { continue }
+                }
+                if isDir {
+                    // Cartelle con un file ".nomedia": saltate, come su Android.
+                    if !options.scanNomedia, fm.fileExists(atPath: url.appendingPathComponent(".nomedia").path) {
                         enumerator.skipDescendants()
                     }
                     continue
                 }
-                guard audioExtensions.contains(url.pathExtension.lowercased()) else { continue }
+                guard extensions.contains(url.pathExtension.lowercased()) else { continue }
                 guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isDirectory != true else { continue }
                 let full = url.resolvingSymlinksInPath().standardizedFileURL.path
                 let relative: String

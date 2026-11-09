@@ -13,6 +13,11 @@ struct SettingsScreen: View {
                     switch dest {
                     case .interface: InterfaceSettingsPage()
                     case .audio: AudioSettingsPage()
+                    case .library: LibrarySettingsPage()
+                    case .scanFolders: ScanFoldersPage()
+                    case .excludedFolders: ExcludedFoldersPage()
+                    case .libraryAdvanced: LibraryAdvancedPage()
+                    case .hideExtra: HideExtraPage()
                     case .eqSettings: EqualizerSettingsPage()
                     case .replayGain: ReplayGainSettingsPage()
                     case .replayGainCalc: ReplayGainCalcPage()
@@ -47,6 +52,7 @@ struct SettingsRootPage: View {
                     SettingsRow(title: "Lingua", subtitle: "italiano", systemIcon: "globe") { showLanguage = true }
                     SettingsRow(title: "Interfaccia", systemIcon: "paintpalette.fill") { nav.path = [.interface] }
                     SettingsRow(title: "Audio", systemIcon: "speaker.wave.2.fill") { nav.path = [.audio] }
+                    SettingsRow(title: "Libreria brani e tag", systemIcon: "music.note.list") { nav.path = [.library] }
                 }
                 .listRowInsets(EdgeInsets())
 
@@ -853,12 +859,31 @@ struct SettingsEntry: Identifiable {
             e("Leggi/calcola automaticamente il RG della canzone corrente e la canzone successiva", .audio, .replayGain),
             e("Preamp per file con RG", .audio, .replayGain),
             e("Preamp per file senza RG", .audio, .replayGain),
-            e("Cartelle musicali"),
-            e("Aggiungi cartella"),
-            e("Aggiorna la libreria"),
-            e("Cartelle escluse dalla scansione"),
-            e("Separatori artisti"),
-            e("Eccezioni (mai divisi)"),
+            e("Libreria brani e tag", .library),
+            e("Cartelle da analizzare", .library, .scanFolders),
+            e("Aggiungi cartella", .library, .scanFolders),
+            e("Cartelle escluse", .library, .excludedFolders),
+            e("Escludi file dalla durata breve", .library),
+            e("Avanzati", .library, .libraryAdvanced),
+            e("Scanner preferito", .library, .libraryAdvanced),
+            e("Se il tag AlbumArtist non è presente, utilizza il tag Artista", .library, .libraryAdvanced),
+            e("Scansione all'interno di cartelle nascoste", .library, .libraryAdvanced),
+            e("Scansione all'interno di cartelle \"nomedia\"", .library, .libraryAdvanced),
+            e("Scansione di file video", .library, .libraryAdvanced),
+            e("Scansione", .library),
+            e("Scansione automatica", .library),
+            e("Strategia di unione degli album", .library),
+            e("Multi Artisti", .library),
+            e("Separatori per \"Multi Artisti\"", .library),
+            e("Multi Artisti album", .library),
+            e("Multi Compositori", .library),
+            e("Multi Genere", .library),
+            e("Eccezioni (mai divisi)", .library),
+            e("Usa i file folder.jpg, cover.jpg ecc", .library),
+            e("Sorgente preferita per i testi", .library),
+            e("Nascondi contenuti extra dai tag", .library, .hideExtra),
+            e("Tipi di file supportati", .library),
+            e("Dispositivi di memoria", .library),
             e("Widget Home"),
             e("Toccando un brano"),
             e("Numero massimo di code"),

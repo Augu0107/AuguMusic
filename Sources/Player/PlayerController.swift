@@ -889,9 +889,9 @@ final class PlayerController: ObservableObject {
             return
         }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: t.displayTitle,
-            MPMediaItemPropertyArtist: t.displayArtist,
-            MPMediaItemPropertyAlbumTitle: t.displayAlbum,
+            MPMediaItemPropertyTitle: TagCleaner.nowPlaying(t.displayTitle),
+            MPMediaItemPropertyArtist: TagCleaner.nowPlaying(t.displayArtist),
+            MPMediaItemPropertyAlbumTitle: TagCleaner.nowPlaying(t.displayAlbum),
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: audio.currentTime,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? effectiveSpeed : 0.0,
@@ -927,7 +927,7 @@ final class PlayerController: ObservableObject {
                 }
             }
         }
-        let state = WidgetBridge.State(track: currentTrack,
+        let state = WidgetBridge.State(track: currentTrack.map(TagCleaner.forNowPlaying),
                                        artwork: nowPlayingImage,
                                        isPlaying: isPlaying,
                                        isFavorite: loadedTrackID.map { UserDataStore.shared?.isFavorite($0) ?? false } ?? false,

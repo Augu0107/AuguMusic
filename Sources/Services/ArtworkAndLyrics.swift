@@ -46,8 +46,13 @@ final class ArtworkLoader: @unchecked Sendable {
             if let front = metadata.attachedPictures(ofType: .frontCover).first { return front.imageData }
             if let any = metadata.attachedPictures.first { return any.imageData }
         }
-        // Copertina nella cartella (cover.jpg, folder.jpg, ...)
+        // Copertina nella cartella (cover.jpg, folder.jpg, ...): "Mai", "Se la cartella contiene brani di solo 1 album", "Sempre".
         let dir = url.deletingLastPathComponent()
+        switch Prefs.string(Prefs.folderArtwork) {
+        case "never": return nil
+        case "singleAlbum": guard FolderAlbumIndex.shared.isSingleAlbum(dir) else { return nil }
+        default: break
+        }
         guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return nil }
         let names = ["cover", "folder", "front", "albumart", "album"]
         for name in names {
@@ -99,6 +104,12 @@ struct Lyrics: Equatable {
 
 enum LyricsLoader {
     static func load(url: URL) async -> Lyrics? {
+        // "Sorgente preferita per i testi": prima quelli nei tag o prima il file .lrc.
+        if Prefs.string(Prefs.lyricsSource) != "lrc",
+           let text = await MetadataReader.embeddedLyrics(url: url),
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return parse(text, source: "Testo nei tag")
+        }
         let dir = url.deletingLastPathComponent()
         let baseName = url.deletingPathExtension().lastPathComponent.lowercased()
         if let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {

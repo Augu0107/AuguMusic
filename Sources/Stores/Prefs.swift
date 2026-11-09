@@ -74,6 +74,30 @@ enum Prefs {
 
     static let lastMonthlyHint = "np.lastMonthlyHint"
 
+    // Libreria brani e tag
+    static let minDuration = "lib.minDuration"
+    static let scannerPref = "lib.scanner"
+    static let albumArtistFallback = "lib.albumArtistFallback"
+    static let scanHidden = "lib.scanHidden"
+    static let scanNomedia = "lib.scanNomedia"
+    static let scanVideo = "lib.scanVideo"
+    static let autoScan = "lib.autoScan"
+    static let albumMerge = "lib.albumMerge"
+    static let multiArtist = "lib.multiArtist"
+    static let multiAlbumArtist = "lib.multiAlbumArtist"
+    static let multiComposer = "lib.multiComposer"
+    static let multiGenre = "lib.multiGenre"
+    static let sepArtist = "lib.sepArtist"
+    static let sepAlbumArtist = "lib.sepAlbumArtist"
+    static let sepComposer = "lib.sepComposer"
+    static let sepGenre = "lib.sepGenre"
+    static let folderArtwork = "lib.folderArtwork"
+    static let lyricsSource = "lib.lyricsSource"
+    static let hideExtraNowPlaying = "lib.hideExtraNowPlaying"
+    static let hideExtraAll = "lib.hideExtraAll"
+
+    static let defaultSeparators = ", ; / | & ft. feat."
+
     static let defaults: [String: Any] = [
         tabBarTop: false,
         tabOrder: "",
@@ -125,6 +149,26 @@ enum Prefs {
         menuArtist: "advShuffle,share,tagEditor,speed,rg",
         menuGenre: "advShuffle,share,tagEditor,speed,rg",
         menuPlaylist: "advShuffle,share,tagEditor,speed,rg",
+        minDuration: 0,
+        scannerPref: "system",
+        albumArtistFallback: false,
+        scanHidden: false,
+        scanNomedia: false,
+        scanVideo: false,
+        autoScan: true,
+        albumMerge: "",
+        multiArtist: true,
+        multiAlbumArtist: true,
+        multiComposer: false,
+        multiGenre: false,
+        sepArtist: defaultSeparators,
+        sepAlbumArtist: defaultSeparators,
+        sepComposer: defaultSeparators,
+        sepGenre: ", ; / | &",
+        folderArtwork: "always",
+        lyricsSource: "embedded",
+        hideExtraNowPlaying: false,
+        hideExtraAll: false,
     ]
 
     static func register() {

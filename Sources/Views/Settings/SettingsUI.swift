@@ -6,12 +6,18 @@ import SwiftUI
 enum SettingsDest: Hashable {
     case interface, theme, optionsMenus
     case audio, eqSettings, replayGain, replayGainCalc
+    case library, scanFolders, excludedFolders, libraryAdvanced, hideExtra
     case menuQueue, menuNowPlaying, menuFolders, menuAlbums, menuArtists, menuGenres, menuPlaylists
 
     var title: String {
         switch self {
         case .interface: "Interfaccia"
         case .audio: "Audio"
+        case .library: "Libreria brani e tag"
+        case .scanFolders: "Cartelle da analizzare"
+        case .excludedFolders: "Cartelle escluse"
+        case .libraryAdvanced: "Avanzati"
+        case .hideExtra: "Nascondi contenuti extra dai tag"
         case .eqSettings: "Equalizzatore di AuguMusic"
         case .replayGain: "ReplayGain"
         case .replayGainCalc: "Leggi/Calcola RG"
