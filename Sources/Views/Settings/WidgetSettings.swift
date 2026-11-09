@@ -114,7 +114,7 @@ struct WidgetSettingsPage: View {
             }
         }
         .padding(18)
-        .background(WidgetBackground(snap: snap), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background(WidgetBackground(snap: snap))
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .allowsHitTesting(false)
     }
